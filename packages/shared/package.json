@@ -1,0 +1,1 @@
+{"name":"@cyberguard/shared","version":"1.0.0","private":true,"main":"dist/index.js","types":"dist/index.d.ts","exports":{".":{"types":"./dist/index.d.ts","import":"./src/index.ts","require":"./dist/index.js","default":"./src/index.ts"}},"scripts":{"build":"tsc","lint":"tsc --noEmit","typecheck":"tsc --noEmit","test":"node --test"},"devDependencies":{"typescript":"5.7.3"}}

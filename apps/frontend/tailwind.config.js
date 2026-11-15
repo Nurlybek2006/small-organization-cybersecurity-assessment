@@ -1,0 +1,2 @@
+/** @type {import('tailwindcss').Config} */
+export default {darkMode:['class','[data-theme="dark"]'],content:['./index.html','./src/**/*.{ts,tsx}'],theme:{extend:{colors:{background:'hsl(var(--background))',foreground:'hsl(var(--foreground))',card:'hsl(var(--card))',muted:'hsl(var(--muted))',border:'hsl(var(--border))',primary:'hsl(var(--primary))'},boxShadow:{soft:'0 12px 34px rgba(15,23,42,.07)'}}},plugins:[]};

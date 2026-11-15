@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cyberguard
+      POSTGRES_PASSWORD: cyberguard
+      POSTGRES_DB: cyberguard
+    ports:
+      - "5432:5432"
+    volumes:
+      - cyberguard_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cyberguard -d cyberguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  cyberguard_pg:

@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id String @id @default(cuid())
+  name String @unique
+  employeeCount Int @default(12)
+  notes String @default("Оқу мақсатындағы модельдік ұйым")
+  assets Asset[]
+  controls SecurityControl[]
+  policies SecurityPolicy[]
+  recommendations Recommendation[]
+  createdAt DateTime @default(now())
+}
+model Asset {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  name String
+  description String @db.Text
+  category String
+  owner String
+  criticality Int @default(3)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  threats Threat[]
+  controls AssetSecurityControl[]
+  risks RiskAssessment[]
+  @@index([organizationId, category])
+}
+model Threat {
+  id String @id @default(cuid())
+  assetId String
+  asset Asset @relation(fields:[assetId], references:[id], onDelete:Cascade)
+  name String
+  description String @db.Text
+  vulnerabilities Vulnerability[]
+  risks RiskAssessment[]
+  @@index([assetId])
+}
+model Vulnerability {
+  id String @id @default(cuid())
+  threatId String
+  threat Threat @relation(fields:[threatId], references:[id], onDelete:Cascade)
+  name String
+  description String @db.Text
+  risks RiskAssessment[]
+  @@index([threatId])
+}
+model RiskAssessment {
+  id String @id @default(cuid())
+  assetId String
+  asset Asset @relation(fields:[assetId], references:[id], onDelete:Cascade)
+  threatId String
+  threat Threat @relation(fields:[threatId], references:[id], onDelete:Cascade)
+  vulnerabilityId String
+  vulnerability Vulnerability @relation(fields:[vulnerabilityId], references:[id], onDelete:Cascade)
+  likelihood Int
+  impact Int
+  score Int
+  severity String
+  consequence String @db.Text
+  justification String @db.Text
+  mitigation String @db.Text
+  isSimulated Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  history RiskAssessmentHistory[]
+  recommendations Recommendation[]
+  @@index([severity, score])
+}
+model RiskAssessmentHistory {
+  id String @id @default(cuid())
+  assessmentId String
+  assessment RiskAssessment @relation(fields:[assessmentId], references:[id], onDelete:Cascade)
+  likelihood Int
+  impact Int
+  score Int
+  severity String
+  note String @db.Text
+  createdAt DateTime @default(now())
+}
+model SecurityControl {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  name String
+  description String @db.Text
+  purpose String @db.Text
+  instructions String @db.Text
+  status String @default("NOT_STARTED")
+  priority String @default("MEDIUM")
+  responsible String
+  completedAt DateTime?
+  verificationNotes String @default("") @db.Text
+  assets AssetSecurityControl[]
+  @@unique([organizationId, name])
+}
+model AssetSecurityControl {
+  assetId String
+  controlId String
+  asset Asset @relation(fields:[assetId], references:[id], onDelete:Cascade)
+  control SecurityControl @relation(fields:[controlId], references:[id], onDelete:Cascade)
+  @@id([assetId, controlId])
+}
+model Recommendation {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  riskId String?
+  risk RiskAssessment? @relation(fields:[riskId], references:[id], onDelete:SetNull)
+  title String
+  description String @db.Text
+  priority String
+  steps String @db.Text
+  status String @default("OPEN")
+  responsible String
+  expectedBenefit String @db.Text
+  updatedAt DateTime @updatedAt
+}
+model SecurityPolicy {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Cascade)
+  title String
+  detail String @db.Text
+  example String @db.Text
+  position Int
+  acknowledgements PolicyAcknowledgement[]
+  @@unique([organizationId, position])
+}
+model PolicyAcknowledgement {
+  id String @id @default(cuid())
+  policyId String
+  policy SecurityPolicy @relation(fields:[policyId], references:[id], onDelete:Cascade)
+  employee String
+  acknowledgedAt DateTime @default(now())
+  @@unique([policyId, employee])
+}
+model ActivityLog {
+  id String @id @default(cuid())
+  action String
+  entity String
+  entityId String
+  details String @default("") @db.Text
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
