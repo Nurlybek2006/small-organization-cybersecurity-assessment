@@ -13,7 +13,8 @@
     "db:seed": "pnpm --filter @cyberguard/backend db:seed",
     "db:generate": "pnpm --filter @cyberguard/backend db:generate"
   },
-  "devDependencies": { "prettier": "3.4.2", "typescript": "5.7.3" }
+  "devDependencies": {
+    "prettier": "3.4.2",
+    "typescript": "5.7.3"
+  }
 }
-
-

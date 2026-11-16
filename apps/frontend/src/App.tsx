@@ -1,25 +1,2228 @@
-import {useEffect,useState} from 'react';import {NavLink,Route,Routes,useLocation} from 'react-router-dom';import {useMutation,useQuery,useQueryClient} from '@tanstack/react-query';import {useTranslation} from 'react-i18next';import {Activity,ArrowDownRight,ArrowUpRight,BookOpen,Check,ChevronDown,ChevronLeft,ChevronRight,Cloud,Computer,FileText,Globe,Home,LockKeyhole,Menu,Monitor, Moon,Network,Plus,Search,Shield,ShieldCheck,Sun,TriangleAlert,Wifi,X} from 'lucide-react';import {Area,AreaChart,Bar,BarChart,CartesianGrid,Cell,Pie,PieChart,ResponsiveContainer,Tooltip,XAxis,YAxis} from 'recharts';import {Background,Controls as FlowControls,ReactFlow, type Edge,type Node} from '@xyflow/react';import '@xyflow/react/dist/style.css';import {useForm} from 'react-hook-form';import {z} from 'zod';import {zodResolver} from '@hookform/resolvers/zod';import {severityLabel,severityFor,riskScore,type Severity,type AssetDto,type DashboardSummary} from '@cyberguard/shared';import {get,patch,post,api} from './api';
-type AnyRecord=Record<string,any>;
-const links=[['/', 'overview',Home],['/assets','assets',Monitor],['/risks','risks',TriangleAlert],['/controls','controls',ShieldCheck],['/topology','topology',Network],['/learning','learning',LockKeyhole],['/policies','policies',BookOpen],['/recommendations','recommendations',Check],['/presentation','presentation',Activity]] as const;
-const colors:Record<Severity,string>={LOW:'#22c55e',MEDIUM:'#f59e0b',HIGH:'#ef4444'};
-function Pill({severity,children}:{severity?:Severity;children?:React.ReactNode}){const label=severity?severityLabel[(localStorage.getItem('cyberguard-language')||'kk') as 'kk'|'ru'|'en'][severity]:children;return <span className={`pill ${severity?.toLowerCase()||''}`}><i/>{label}</span>}
-function App(){const {t,i18n}=useTranslation();const [dark,setDark]=useState(localStorage.getItem('cyberguard-theme')==='dark');const [mobile,setMobile]=useState(false);const location=useLocation();const titleKey=links.find(x=>x[0]===location.pathname)?.[1]??'overview';useEffect(()=>{document.documentElement.dataset.theme=dark?'dark':'light';localStorage.setItem('cyberguard-theme',dark?'dark':'light')},[dark]);const setLang=(v:string)=>{void i18n.changeLanguage(v);localStorage.setItem('cyberguard-language',v);document.documentElement.lang=v};return <div className="app-shell"><aside className={`sidebar ${mobile?'mobile-open':''}`}><div className="brand"><div className="brand-mark"><Shield size={21}/></div><div><b>CyberGuard</b><small>SECURITY ASSESSMENT</small></div><button className="icon-btn mobile-close" onClick={()=>setMobile(false)}><X size={17}/></button></div><div className="org-switch"><div className="org-avatar">SE</div><div><b>Smart Education</b><small>Ұйым кеңістігі</small></div><ChevronDown size={15}/></div><div className="nav-label">WORKSPACE</div><nav>{links.map(([to,key,Icon])=><NavLink end={to==='/'} key={to} to={to} onClick={()=>setMobile(false)} className={({isActive})=>`nav-item ${isActive?'active':''}`}><Icon size={17}/><span>{t(`nav.${key}`)}</span>{key==='risks'&&<span className="nav-dot"/>}</NavLink>)}</nav><div className="sidebar-bottom"><div className="demo-badge"><span className="pulse"/><div><b>Оқу режимі</b><small>Симуляцияланған деректер</small></div></div><div className="user"><div className="user-avatar">SA</div><div><b>Студент аккаунты</b><small>Жергілікті демонстрация</small></div><ChevronDown size={15}/></div></div></aside><main className="main-area"><header className="topbar"><div className="top-left"><button className="icon-btn menu-btn" onClick={()=>setMobile(true)}><Menu size={19}/></button><div className="crumb">Басты бет <ChevronRight size={13}/><b>{t(`nav.${titleKey}`)}</b></div></div><div className="top-actions"><div className="searchbox"><Search size={15}/><input placeholder={t('search')+'…'} onKeyDown={e=>{if(e.key==='Enter'&&e.currentTarget.value)window.location.href='/assets?search='+encodeURIComponent(e.currentTarget.value)}}/><kbd>⌘ K</kbd></div><select aria-label={t('language')} value={i18n.language} onChange={e=>setLang(e.target.value)}><option value="kk">ҚАЗ</option><option value="ru">РУС</option><option value="en">ENG</option></select><button className="icon-btn" aria-label={t('theme')} onClick={()=>setDark(!dark)}>{dark?<Sun size={17}/>:<Moon size={17}/>}</button><div className="top-avatar">SA</div></div></header><div className="page"><div className="page-heading"><div><div className="eyebrow">SMART EDUCATION <span>•</span> SECURITY CENTER</div><h1>{t(`nav.${titleKey}`)}</h1><p>{titleKey==='overview'?t('subtitle'):t('simulated')}</p></div><div className="heading-date"><span className="live-dot"/>ОҚУ ДЕРЕКТЕРІ&nbsp; · &nbsp;{new Date().toLocaleDateString('kk-KZ',{day:'2-digit',month:'short',year:'numeric'})}</div></div><Routes><Route path="/" element={<Dashboard/>}/><Route path="/assets" element={<Assets/>}/><Route path="/risks" element={<Risks/>}/><Route path="/controls" element={<Controls/>}/><Route path="/topology" element={<Topology/>}/><Route path="/learning" element={<Learning/>}/><Route path="/policies" element={<Policies/>}/><Route path="/recommendations" element={<Recommendations/>}/><Route path="/presentation" element={<Presentation/>}/><Route path="*" element={<Dashboard/>}/></Routes><footer>© 2026 CyberGuard <span>Оқу мақсатындағы жоба · Нақты сканерлеу жүргізілмейді</span></footer></div></main></div>}
-function useData<T,>(key:string,url:string){return useQuery({queryKey:[key],queryFn:()=>get<T>(url)});}
-function ErrorState({message}:{message:string}){return <div className="empty-state"><TriangleAlert size={22}/><b>{message}</b><span>API сервері мен PostgreSQL қосылымын тексеріңіз.</span></div>}
-function Stat({label,value,sub,icon:Icon,accent,change}:{label:string,value:React.ReactNode,sub:string,icon:typeof Shield,accent:string,change?:string}){return <article className="stat-card"><div className="stat-top"><span>{label}</span><span className="stat-icon" style={{color:accent,background:`${accent}18`}}><Icon size={17}/></span></div><div className="stat-value">{value}</div><div className="stat-sub"><span style={{color:accent}}>{change}</span> {sub}</div></article>}
-function Dashboard(){const {t}=useTranslation();const q=useData<DashboardSummary>('dashboard','/dashboard/summary');const trend=useData<AnyRecord[]>('trend','/dashboard/risk-trends');const dist=useData<AnyRecord[]>('distribution','/dashboard/risk-distribution');const assets=useData<{items:AssetDto[]}>('assets','/assets?limit=100');if(q.isLoading)return <div className="loading-grid">{Array.from({length:6},(_,i)=><div className="skeleton" key={i}/>)}</div>;if(q.isError||!q.data)return <ErrorState message={t('error')}/>;const d=q.data;const categories=Object.entries((assets.data?.items||[]).reduce<Record<string,number>>((a,x)=>{a[x.category]=(a[x.category]||0)+1;return a},{})).map(([category,count])=>({category,count}));return <><div className="welcome-row"><div className="welcome-icon"><ShieldCheck size={20}/></div><div><h2>{t('welcome')}, команда Smart Education <span>✦</span></h2><p>{t('profile')} · бағалау күйі бүгін жаңартылды</p></div><button className="button secondary" onClick={()=>window.location.href='/presentation'}><Activity size={16}/>Таныстырылымды ашу</button><button className="button primary" onClick={()=>window.open("/api/reports/academic.pdf","_blank")}><FileText size={15}/>{t("exportPdf")}</button></div><div className="stats-grid"><Stat label={t('score')} value={<>{d.securityScore}<small>/100</small></>} sub="орташа тәуекелге негізделген" icon={ShieldCheck} accent="#3b82f6" change="↗"/><Stat label={t('assetsCount')} value={d.assetCount.toString().padStart(2,'0')} sub="ұйым тізімдемесінде" icon={Monitor} accent="#8b5cf6"/><Stat label={t('risksCount')} value={d.riskCount.toString().padStart(2,'0')} sub="қолмен бағаланған" icon={Activity} accent="#06b6d4"/><Stat label={t('high')} value={d.high.toString().padStart(2,'0')} sub="басым әрекетті қажет етеді" icon={TriangleAlert} accent="#ef4444" change="!"/><Stat label={t('controls')} value={`${d.controlsComplete}/${d.controlCount}`} sub="шара енгізілді немесе тексерілді" icon={Shield} accent="#22c55e"/><Stat label={t('openRecs')} value={d.openRecommendations.toString().padStart(2,'0')} sub="орындалуын күтуде" icon={Check} accent="#f59e0b"/></div><div className="charts-grid"><section className="card chart-card"><div className="card-heading"><div><h3>{t('riskDistribution')}</h3><p>Қазіргі бағалаулардың саны</p></div><span className="tag">Ағымдағы күй</span></div><div className="donut-wrap"><ResponsiveContainer width="58%" height={190}><PieChart><Pie data={(dist.data||[]).map(x=>({name:severityLabel[(localStorage.getItem('cyberguard-language')||'kk') as 'kk'|'ru'|'en'][x.severity as Severity],value:x.count,severity:x.severity}))} dataKey="value" nameKey="name" innerRadius={55} outerRadius={82} paddingAngle={4}><Cell fill="#ef4444"/><Cell fill="#f59e0b"/><Cell fill="#22c55e"/></Pie><Tooltip/></PieChart></ResponsiveContainer><div className="donut-center"><b>{d.riskCount}</b><small>тәуекел</small></div></div><div className="legend">{(dist.data||[]).map(x=><div key={x.severity}><i style={{background:colors[x.severity as Severity]}}/>{severityLabel[(localStorage.getItem('cyberguard-language')||'kk') as 'kk'|'ru'|'en'][x.severity as Severity]}<b>{x.count}</b></div>)}</div></section><section className="card chart-card trend-card"><div className="card-heading"><div><h3>{t('riskTrend')}</h3><p>Сақталған қайта бағалау тарихы</p></div><span className="chart-period">Тарихи дерек</span></div>{trend.data?.length?<ResponsiveContainer width="100%" height={220}><AreaChart data={trend.data}><defs><linearGradient id="riskGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#6366f1" stopOpacity={.26}/><stop offset="100%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="3 5" stroke="var(--chart-grid)" vertical={false}/><XAxis dataKey="date" tick={{fontSize:10,fill:'var(--muted-foreground)'}} axisLine={false} tickLine={false}/><YAxis domain={[0,25]} tick={{fontSize:10,fill:'var(--muted-foreground)'}} axisLine={false} tickLine={false}/><Tooltip/><Area type="monotone" dataKey="averageRisk" stroke="#6366f1" strokeWidth={2.5} fill="url(#riskGradient)"/></AreaChart></ResponsiveContainer>:<div className="chart-empty">Қайта бағалау тіркелгенде тарихи тренд пайда болады.</div>}</section><section className="card chart-card"><div className="card-heading"><div><h3>Активтер санаты</h3><p>Тіркелімдегі бөлініс</p></div></div><ResponsiveContainer width="100%" height={185}><BarChart data={categories} margin={{left:-20,right:8,top:8}}><CartesianGrid strokeDasharray="3 5" stroke="var(--chart-grid)" vertical={false}/><XAxis dataKey="category" tick={{fontSize:9,fill:'var(--muted-foreground)'}} axisLine={false} tickLine={false}/><YAxis allowDecimals={false} tick={{fontSize:10,fill:'var(--muted-foreground)'}} axisLine={false} tickLine={false}/><Tooltip/><Bar dataKey="count" fill="#6366f1" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></section><section className="card chart-card"><div className="card-heading"><div><h3>Қорғаныс шаралары</h3><p>Енгізілу барысы</p></div><b className="progress-label">{d.controlCount?Math.round(d.controlsComplete/d.controlCount*100):0}%</b></div><div className="progress-track"><span style={{width:`${d.controlCount?d.controlsComplete/d.controlCount*100:0}%`}}/></div><div className="control-summary"><ShieldCheck size={17}/><div><b>{d.controlsComplete} / {d.controlCount} орындалды</b><small>Енгізілген немесе тексерілген шара</small></div></div><NavLink to="/controls" className="text-link">Барлық шараны көру <ChevronRight size={14}/></NavLink></section></div><section className="card table-card"><div className="card-heading"><div><h3>{t('recentRisks')}</h3><p>Ағымдағы басымдықтар</p></div><NavLink className="text-link" to="/risks">Барлығын көру <ChevronRight size={14}/></NavLink></div><div className="table-scroll"><table><thead><tr><th>АКТИВ</th><th>ҚАУІП</th><th>ҰПАЙ</th><th>ДЕҢГЕЙ</th><th>КҮЙІ</th></tr></thead><tbody>{d.risks.map(r=><tr key={r.id}><td><b>{r.asset.name}</b><small>Симуляцияланған бағалау</small></td><td>{r.threat.name}</td><td><b>{r.score}</b><small>/25</small></td><td><Pill severity={r.severity as Severity}/></td><td><span className="status-dot">●</span> Бағаланған</td></tr>)}</tbody></table></div></section><section className="card table-card"><div className="card-heading"><div><h3>{t("recentActivity")}</h3><p>?????????? ????????? ????? ??????????</p></div></div><div className="activity-list">{d.activities.length?d.activities.map(a=><div className="activity-row" key={a.id}><span className="activity-icon"><Activity size={14}/></span><div><b>{a.details||a.action+" ? "+a.entity}</b><small>{a.entity} ? сақталған өзгеріс</small></div><time>{new Date(a.createdAt).toLocaleString()}</time></div>):<div className="chart-empty">Әзірге әрекет жоқ</div>}</div></section><div className="disclaimer"><Shield size={16}/><span>{t('simulated')}. Көрсеткіш 100 − орташа тәуекел × 4 формуласы бойынша есептеледі.</span><NavLink to="/risks">Әдістеме <ChevronRight size={14}/></NavLink></div></>}
-const assetSchema=z.object({name:z.string().min(2),description:z.string().min(5),category:z.string().min(2),owner:z.string().min(2),criticality:z.coerce.number().min(1).max(5)});type AssetForm=z.infer<typeof assetSchema>;
-function Assets(){const {t}=useTranslation();const qc=useQueryClient();const [term,setTerm]=useState('');const [category,setCategory]=useState('');const [severity,setSeverity]=useState('');const [sort,setSort]=useState('name');const [page,setPage]=useState(1);const [dialog,setDialog]=useState(false);const [edit,setEdit]=useState<AnyRecord|null>(null);const [selected,setSelected]=useState<AnyRecord|null>(null);const data=useQuery({queryKey:['assets',term,category,severity,sort,page],queryFn:()=>get<{items:AnyRecord[],total:number}>(`/assets?limit=12&page=${page}&search=${encodeURIComponent(term)}&category=${encodeURIComponent(category)}&severity=${severity}&sort=${sort}`)});const cats=[...new Set((data.data?.items||[]).map(a=>a.category))];const mutation=useMutation({mutationFn:(v:AssetForm)=>edit?patch(`/assets/${edit.id}`,v):post('/assets',v),onSuccess:()=>{void qc.invalidateQueries({queryKey:['assets']});setDialog(false);setEdit(null)}});const del=useMutation({mutationFn:(id:string)=>api.delete(`/assets/${id}`),onSuccess:()=>{void qc.invalidateQueries({queryKey:['assets']});setSelected(null)}});if(data.isError)return <ErrorState message={t('error')}/>;return <><div className="toolbar"><div className="filter-search"><Search size={15}/><input placeholder="Актив атауымен іздеу…" value={term} onChange={e=>setTerm(e.target.value)}/></div><select value={category} onChange={e=>setCategory(e.target.value)}><option value="">Барлық санат</option>{cats.map(c=><option key={c}>{c}</option>)}</select><select value={severity} onChange={e=>setSeverity(e.target.value)}><option value="">Барлық деңгей</option><option value="HIGH">Жоғары тәуекел</option><option value="MEDIUM">Орташа тәуекел</option><option value="LOW">Төмен тәуекел</option></select><select value={sort} onChange={e=>setSort(e.target.value)}><option value="name">Сұрыптау: атауы</option><option value="name-desc">Кері атау</option><option value="risk">Тәуекел саны</option></select><button className="button primary" onClick={()=>{setEdit(null);setDialog(true)}}><Plus size={16}/>{t('addAsset')}</button></div>{data.isLoading?<div className="skeleton tall"/>:<div className="asset-grid">{data.data?.items.map((a:any)=>{const r=a.risks?.[0];return <article key={a.id} className="card asset-card"><div className="asset-icon"><Monitor size={19}/><span className="criticality">{a.criticality}/5</span></div><div className="asset-card-title"><h3>{a.name}</h3><p>{a.category}</p></div><p className="asset-description">{a.description}</p><div className="asset-meta"><span><b>Жауапты</b>{a.owner}</span><span><b>Қауіп ұпайы</b>{r?<><strong>{r.score}/25</strong><Pill severity={r.severity}/></>:'Бағалау жоқ'}</span></div><div className="asset-actions"><button className="text-link" onClick={()=>setSelected(a)}>Толығырақ <ChevronRight size={14}/></button><button className="icon-btn" title={t('edit')} onClick={()=>{setEdit(a);setDialog(true)}}>✎</button><button className="icon-btn danger" title={t('delete')} onClick={()=>{if(confirm(`«${a.name}» активін жоясыз ба?`))del.mutate(a.id)}}>⌫</button></div></article>})}</div>}{(data.data?.total||0)>12&&<div className="pagination"><button className="button secondary" disabled={page<=1} onClick={()=>setPage(page-1)}><ChevronLeft size={14}/>???????</button><span>{page} / {Math.ceil((data.data?.total||0)/12)}</span><button className="button secondary" disabled={page>=Math.ceil((data.data?.total||0)/12)} onClick={()=>setPage(page+1)}>??????<ChevronRight size={14}/></button></div>}{!data.data?.items.length&&<div className="empty-state">{t('empty')}</div>}{dialog&&<AssetDialog initial={edit} onClose={()=>{setDialog(false);setEdit(null)}} onSave={v=>mutation.mutate(v)} busy={mutation.isPending} error={mutation.isError?'Өзгерісті сақтау мүмкін болмады. Демо режимін тексеріңіз.':''}/ >}{selected&&<div className="overlay" onClick={()=>setSelected(null)}><div className="dialog" onClick={e=>e.stopPropagation()}><div className="dialog-head"><div><span className="eyebrow">АКТИВ ПРОФИЛІ</span><h2>{selected.name}</h2></div><button className="icon-btn" onClick={()=>setSelected(null)}><X size={18}/></button></div><p>{selected.description}</p><div className="detail-grid"><span>Санат<b>{selected.category}</b></span><span>Жауапты<b>{selected.owner}</b></span><span>Маңыздылығы<b>{selected.criticality}/5</b></span><span>Жасалған күні<b>{new Date(selected.createdAt).toLocaleDateString('kk-KZ')}</b></span></div>{selected.risks?.map((r:any)=><div className="risk-strip" key={r.id}><Pill severity={r.severity}/><b>{r.threat?.name}</b><span>{r.score}/25</span></div>)}</div></div>}</>}
-function AssetDialog({initial,onClose,onSave,busy,error}:{initial:AnyRecord|null;onClose:()=>void;onSave:(v:AssetForm)=>void;busy:boolean;error:string}){const {t}=useTranslation();const {register,handleSubmit,formState:{errors}}=useForm<AssetForm>({resolver:zodResolver(assetSchema),defaultValues:initial?{...initial,criticality:Number(initial.criticality)}:{name:'',description:'',category:'Құрылғы',owner:'Әкімшілік',criticality:3}});return <div className="overlay" onClick={onClose}><form className="dialog form-dialog" onClick={e=>e.stopPropagation()} onSubmit={handleSubmit(onSave)}><div className="dialog-head"><div><span className="eyebrow">АКТИВ ТІЗІМДЕМЕСІ</span><h2>{initial?t('edit')+' актив':'Жаңа актив'}</h2></div><button type="button" className="icon-btn" onClick={onClose}><X size={18}/></button></div>{[['name','Атауы'],['description','Сипаттамасы'],['category','Санаты'],['owner','Жауапты тұлға'],['criticality','Маңыздылығы (1–5)']].map(([k,l])=><label className="field" key={k}>{l}<input type={k==='criticality'?'number':'text'} min="1" max="5" {...register(k as keyof AssetForm)}/>{errors[k as keyof AssetForm]&&<small className="field-error">Міндетті өрісті дұрыс толтырыңыз</small>}</label>)}{error&&<div className="form-error">{error}</div>}<div className="dialog-actions"><button className="button secondary" type="button" onClick={onClose}>{t('cancel')}</button><button className="button primary" disabled={busy}>{busy?'Сақталуда…':t('save')}</button></div></form></div>}
-function Risks(){const {t}=useTranslation();const qc=useQueryClient();const [chosen,setChosen]=useState<AnyRecord|null>(null);const [assetId,setAsset]=useState('');const [likelihood,setLikelihood]=useState(3);const [impact,setImpact]=useState(3);const [justification,setJustification]=useState('Оқу сценарийіне негізделген қолмен бағалау');const [consequence,setConsequence]=useState('');const [mitigation,setMitigation]=useState('');const data=useData<AnyRecord[]>('risks','/risks');const assets=useData<{items:AnyRecord[]}>('assets-all','/assets?limit=100');const selectedAsset=assets.data?.items.find((a:any)=>a.id===(chosen?.assetId||assetId));const threat=selectedAsset?.threats?.[0];const vulnerability=threat?.vulnerabilities?.[0];const score=riskScore(likelihood,impact),severity=severityFor(score);const mutation=useMutation({mutationFn:()=>chosen?patch(`/risks/${chosen.id}`,{assetId:chosen.assetId,threatId:chosen.threatId,vulnerabilityId:chosen.vulnerabilityId,likelihood,impact,justification,consequence:consequence||chosen.consequence,mitigation:mitigation||chosen.mitigation}):post('/risks',{assetId,threatId:threat?.id,vulnerabilityId:vulnerability?.id,likelihood,impact,justification,consequence,mitigation}),onSuccess:()=>{void qc.invalidateQueries();setChosen(null)}});const start=(r?:AnyRecord)=>{setChosen(r||null);setAsset(r?.assetId||assets.data?.items[0]?.id||'');setLikelihood(r?.likelihood||3);setImpact(r?.impact||3);setJustification(r?.justification||'');setConsequence(r?.consequence||'');setMitigation(r?.mitigation||'')};return <><div className="risk-header card"><div><span className="eyebrow">5 × 5 ТӘУЕКЕЛ ӘДІСІ</span><h2>Ықтималдық × әсер = тәуекел</h2><p>Білім беру мақсатындағы модель; әмбебап ресми стандарт болып саналмайды.</p></div><div className="thresholds"><span className="low">1–4 · Төмен</span><span className="medium">5–9 · Орташа</span><span className="high">10–25 · Жоғары</span></div></div><div className="risk-layout"><section className="card assessment-card"><div className="card-heading"><div><h3>{chosen?'Бағалауды қайта қарау':'Жаңа тәуекелді бағалау'}</h3><p>Бағалау деректері серверде сақталады</p></div><span className="tag">Тікелей есептеу</span></div><label className="field">Ақпараттық актив<select disabled={!!chosen} value={chosen?.assetId||assetId} onChange={e=>setAsset(e.target.value)}>{assets.data?.items.map((a:any)=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><div className="relationship"><span>{t('threat')}<b>{threat?.name||chosen?.threat?.name||'Активті таңдаңыз'}</b></span><ChevronRight size={15}/><span>{t('vulnerability')}<b>{vulnerability?.name||chosen?.vulnerability?.name||'—'}</b></span></div><label className="slider-field">{t('likelihood')} <b>{likelihood}/5</b><input type="range" min="1" max="5" value={likelihood} onChange={e=>setLikelihood(Number(e.target.value))}/><div className="range-labels"><span>Өте төмен</span><span>Өте жоғары</span></div></label><label className="slider-field">{t('impact')} <b>{impact}/5</b><input type="range" min="1" max="5" value={impact} onChange={e=>setImpact(Number(e.target.value))}/><div className="range-labels"><span>Елеусіз</span><span>Өте ауыр</span></div></label><div className="live-score" style={{'--risk-color':colors[severity]} as React.CSSProperties}><div><span>ТӘУЕКЕЛ ҰПАЙЫ</span><strong>{score}<small>/25</small></strong><Pill severity={severity}/></div><MiniMatrix likelihood={likelihood} impact={impact}/></div><label className="field">{t('consequence')}<textarea value={consequence} onChange={e=>setConsequence(e.target.value)} placeholder="Оқиға болса қандай салдар туындауы мүмкін?"/></label><label className="field">{t('justification')}<textarea value={justification} onChange={e=>setJustification(e.target.value)}/></label><label className="field">{t('mitigation')}<textarea value={mitigation} onChange={e=>setMitigation(e.target.value)} placeholder="Ұсынылатын қорғаныс шаралары"/></label><div className="button-row"><button className="button secondary" onClick={()=>start()}>{chosen?'Болдырмау':'Тазарту'}</button><button className="button primary" disabled={mutation.isPending||!assetId&&!chosen||!justification} onClick={()=>mutation.mutate()}><Check size={15}/>{chosen?'Қайта бағалауды сақтау':'Бағалауды сақтау'}</button></div>{mutation.isError&&<p className="form-error">Бағалауды сақтау мүмкін болмады. Актив байланыстарын және демо баптауларын тексеріңіз.</p>}</section><section className="card matrix-card"><div className="card-heading"><div><h3>5 × 5 тәуекел матрицасы</h3><p>Әсер ↑ · Ықтималдық →</p></div></div><Matrix activeL={likelihood} activeI={impact}/><div className="matrix-legend"><Pill severity="LOW"/><Pill severity="MEDIUM"/><Pill severity="HIGH"/></div><div className="matrix-note"><ShieldCheck size={16}/><span>Түстер сақталған оқу бағалауларының деңгейін көрсетеді.</span></div><div className="existing-heatmap"><b>????????? ????????????? ???? ???????</b><ExistingHeatmap risks={data.data||[]}/></div></section></div><section className="card table-card"><div className="card-heading"><div><h3>Сақталған бағалаулар</h3><p>Бағалау тарихын нұсқамен қарау</p></div><span className="tag">{data.data?.length||0} жазба</span></div><div className="table-scroll"><table><thead><tr><th>АКТИВ</th><th>ҚАУІП → ОСАЛДЫҚ</th><th>Ы × Ә</th><th>ҰПАЙ</th><th>ДЕҢГЕЙ</th><th>ӘРЕКЕТ</th></tr></thead><tbody>{data.data?.map((r:any)=><tr key={r.id}><td><b>{r.asset.name}</b></td><td>{r.threat.name}<small>{r.vulnerability.name}</small></td><td>{r.likelihood} × {r.impact}</td><td><b>{r.score}/25</b></td><td><Pill severity={r.severity}/></td><td><button className="text-link" onClick={()=>start(r)}>Қайта бағалау <ChevronRight size={13}/></button></td></tr>)}</tbody></table></div></section></>}
-function MiniMatrix({likelihood,impact}:{likelihood:number;impact:number}){return <div className="mini-matrix">{[5,4,3,2,1].flatMap(i=>[1,2,3,4,5].map(l=><span key={`${i}-${l}`} className={`${severityFor(l*i).toLowerCase()} ${l===likelihood&&i===impact?'selected':''}`}/>) )}</div>}
-function ExistingHeatmap({risks}:{risks:AnyRecord[]}){const [cell,setCell]=useState<[number,number]|null>(null);const entries=[5,4,3,2,1].flatMap(impact=>[1,2,3,4,5].map(likelihood=>({impact,likelihood,matches:risks.filter(r=>r.likelihood===likelihood&&r.impact===impact)})));const chosen=cell?entries.find(x=>x.likelihood===cell[0]&&x.impact===cell[1]):null;return <><div className="heatmap-grid">{entries.map(x=><button key={`${x.likelihood}-${x.impact}`} className={`heat-cell ${severityFor(x.impact*x.likelihood).toLowerCase()} ${x.matches.length?"occupied":""}`} title={`${x.likelihood} ? ${x.impact}: ${x.matches.length} ???????`} onClick={()=>setCell([x.likelihood,x.impact])}><span>{x.matches.length||"?"}</span></button>)}</div>{chosen&&<small className="heatmap-detail">{chosen.matches.length?chosen.matches.map(r=>r.asset.name).join(" ? "):"??? ??????? ??????? ???"}</small>}</>}
-function Matrix({activeL,activeI}:{activeL:number;activeI:number}){return <div className="matrix-wrap"><div className="axis-y">ӘСЕР</div><div className="matrix"><div className="matrix-top-labels">{[1,2,3,4,5].map(i=><span key={i}>{i}</span>)}</div>{[5,4,3,2,1].map(i=><div className="matrix-row" key={i}><b>{i}</b>{[1,2,3,4,5].map(l=><div key={l} className={`matrix-cell ${severityFor(l*i).toLowerCase()} ${l===activeL&&i===activeI?'selected':''}`} title={`${l} × ${i} = ${l*i}`}><span>{l*i}</span></div>)}</div>)}<div className="matrix-bottom-labels"><span>1 · Төмен</span><span>ЫҚТИМАЛДЫҚ →</span><span>5 · Жоғары</span></div></div></div>}
-function Controls(){const {t}=useTranslation();const qc=useQueryClient();const q=useData<AnyRecord[]>('controls','/security-controls');const [notes,setNotes]=useState<Record<string,string>>({});const [owner,setOwner]=useState<Record<string,string>>({});const m=useMutation({mutationFn:({id,status}:{id:string,status:string})=>patch(`/security-controls/${id}`,{status,verificationNotes:notes[id],responsible:owner[id]}),onSuccess:()=>{void qc.invalidateQueries({queryKey:['controls']});void qc.invalidateQueries({queryKey:['dashboard']})}});const progress=q.data?.length?Math.round(q.data.filter(c=>['IMPLEMENTED','VERIFIED'].includes(c.status)).length/q.data.length*100):0;if(q.isError)return <ErrorState message={t('error')}/>;return <><div className="control-banner card"><div className="banner-icon"><ShieldCheck size={25}/></div><div><span className="eyebrow">ҚОРҒАНЫС ҚАЛПЫ</span><h2>Негізгі киберқауіпсіздік шаралары</h2><p>Мәртебені өзгерту қорғаныс прогресіне әсер етеді. Тәуекелді азайту үшін қайта бағалау және растау қажет.</p></div><div className="banner-progress"><b>{progress}%</b><div className="progress-track"><span style={{width:`${progress}%`}}/></div></div></div><div className="control-grid">{q.data?.map(c=><article className="card control-card" key={c.id}><div className="control-card-top"><div className="control-icon"><Shield size={18}/></div><Pill>{({NOT_STARTED:'Басталмаған',IN_PROGRESS:'Орындалуда',IMPLEMENTED:'Енгізілді',VERIFIED:'Тексерілді'} as Record<string,string>)[c.status]}</Pill></div><h3>{c.name}</h3><p>{c.description}</p><div className="control-purpose"><b>Қорғаныс мақсаты</b><span>{c.purpose}</span></div><div className="control-purpose"><b>Іске асыру қадамы</b><span>{c.instructions}</span></div><div className="control-purpose"><b>Қатысты активтер</b><span>{c.assets?.length?c.assets.map((x:any)=>x.asset.name).join(" ? "):"Ұйым деңгейіндегі шара"}</span></div><label className="field compact">Жауапты тұлға<input value={owner[c.id]??c.responsible} onChange={e=>setOwner({...owner,[c.id]:e.target.value})}/></label><label className="field compact">Тексеру жазбасы<textarea placeholder="Орындалуын растайтын мәлімет…" value={notes[c.id]??c.verificationNotes} onChange={e=>setNotes({...notes,[c.id]:e.target.value})}/></label><div className="control-footer"><span>Басымдық <b className={c.priority==='HIGH'?'priority-high':''}>{c.priority==='HIGH'?'Жоғары':'Орташа'}</b></span><select value={c.status} onChange={e=>m.mutate({id:c.id,status:e.target.value})}><option value="NOT_STARTED">Басталмаған</option><option value="IN_PROGRESS">Орындалуда</option><option value="IMPLEMENTED">Енгізілді</option><option value="VERIFIED">Тексерілді</option></select><button className="button secondary" onClick={()=>m.mutate({id:c.id,status:c.status})}>???????????? ??????</button></div>{c.completedAt&&<small className="completion-date">?????????? ????: {new Date(c.completedAt).toLocaleDateString()}</small>}{m.isError&&<small className="field-error">Сақталмады. Жергілікті демо режимін тексеріңіз.</small>}</article>)}</div></>}
-function Topology(){const {t}=useTranslation();const q=useData<AnyRecord>('topology','/network/topology');const [selected,setSelected]=useState<AnyRecord|null>(null);const baseNodes:Node[]=[{id:'internet',position:{x:40,y:160},data:{label:'🌐  Интернет'},type:'input',className:'flow-node external'},{id:'router',position:{x:280,y:160},data:{label:'📡  Wi-Fi маршрутизаторы'},className:'flow-node router'},{id:'desktops',position:{x:540,y:40},data:{label:'🖥️  10 үстел компьютері'},className:'flow-node'},{id:'laptops',position:{x:540,y:125},data:{label:'💻  3 қызметкер ноутбугі'},className:'flow-node'},{id:'printer',position:{x:540,y:210},data:{label:'🖨️  Желілік принтер'},className:'flow-node'},{id:'drive',position:{x:540,y:310},data:{label:'☁️  Google Drive'},type:'output',className:'flow-node cloud'},{id:'email',position:{x:810,y:310},data:{label:'✉️  Корпоративтік пошта'},type:'output',className:'flow-node cloud'}];const [nodes,setNodes]=useState(baseNodes);useEffect(()=>{if(q.data){setNodes(baseNodes.map(n=>({...n,className:`${n.className} ${q.data.nodes.find((x:any)=>x.id===n.id)?.highRisk?'high-node':''}`,data:{...n.data,onClick:()=>setSelected(q.data.nodes.find((x:any)=>x.id===n.id))}}))) }},[q.data]);const edges:Edge[]=q.data?.edges.map((e:any)=>({id:`${e.source}-${e.target}`,source:e.source,target:e.target,animated:true,style:{stroke:'#818cf8',strokeWidth:2.5},type:'smoothstep',markerEnd:{type:'arrowclosed' as const,color:'#818cf8'}}))||[];return <><div className="topology-banner card"><div className="banner-icon blue"><Network size={23}/></div><div><h2>Smart Education желі сызбасы</h2><p>{t('networkNote')} Нүктені басып актив туралы ақпарат алыңыз.</p></div><div className="topology-tools"><button className="button secondary" onClick={()=>setNodes(baseNodes)}>Орналасуды қалпына келтіру</button></div></div><div className="topology-flow card"><ReactFlow nodes={nodes} edges={edges} fitView fitViewOptions={{padding:.18}} onNodeClick={(_,n)=>setSelected(q.data?.nodes.find((x:any)=>x.id===n.id)||null)} onNodesChange={changes=>setNodes(nds=>{const map=new Map(changes.filter(c=>c.type==='position').map(c=>[c.id,c]));return nds.map(n=>{const c=map.get(n.id) as any;return c?.position?{...n,position:c.position}:n})})} nodesDraggable nodesConnectable={false} elementsSelectable><Background color="var(--flow-grid)" gap={21}/><FlowControls/></ReactFlow><div className="flow-legend"><span><i className="legend-office"/>Кеңсе желісі</span><span><i className="legend-cloud"/>Сыртқы бұлттық қызмет</span><span><i className="legend-risk"/>Жоғары тәуекелді актив</span></div></div><div className="topology-info-grid"><section className="card info-card"><div className="info-icon"><ArrowUpRight size={17}/></div><h3>Трафик ағыны</h3><p>Интернет трафигі маршрутизатор арқылы жергілікті құрылғыларға жетеді. Google Drive пен корпоративтік поштаға сұраулар маршрутизатор және интернет арқылы сыртқы қызметтерге өтеді.</p></section><section className="card info-card"><div className="info-icon green"><ShieldCheck size={17}/></div><h3>Қауіпсіздік ескертпесі</h3><p>Бұл схема нақты құрылғыларды анықтамайды. Жергілікті желі сканерлеуі орындалмайды; байланыстар оқу сценарийі бойынша қолмен енгізілген.</p></section></div>{selected&&<div className="overlay" onClick={()=>setSelected(null)}><div className="dialog" onClick={e=>e.stopPropagation()}><div className="dialog-head"><div><span className="eyebrow">ЖЕЛІ ТҮЙІНІ</span><h2>{selected.label}</h2></div><button className="icon-btn" onClick={()=>setSelected(null)}><X size={18}/></button></div><p>Оқу топологиясындағы қолмен сипатталған компонент. Тәуекелдің болуы автоматты тексеруден емес, дерекқордағы бағалаудан алынады.</p>{selected.highRisk&&<Pill severity="HIGH"/>}</div></div>}</>}
-function Learning(){const {t}=useTranslation();const [tab,setTab]=useState('https');return <><div className="learning-hero card"><div className="hero-orb"><LockKeyhole size={30}/></div><div><span className="eyebrow">ҚАУІПСІЗ БАЙЛАНЫС · ТЕОРИЯ</span><h2>Сенімді цифрлық байланыс</h2><p>Интернет байланысын, сертификат пен цифрлық қолтаңбаның рөлін зерттеңіз.</p></div><div className="hero-decoration">TLS<br/>1.3</div></div><div className="tabs">{[['https','HTTPS / TLS'],['cert','Сандық сертификат'],['signature','Электрондық цифрлық қолтаңба']].map(([id,label])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}>{label}</button>)}</div>{tab==='https'&&<div className="learning-grid"><section className="card lesson-card"><div className="lesson-icon red">HTTP</div><span className="eyebrow">ШИФРЛАНБАҒАН</span><h2>HTTP</h2><p>Браузер мен сервер арасындағы хабарламалар ашық мәтінмен тасымалданады. Бір желідегі аралық бақылаушы мазмұнды көріп немесе өзгертуге тырысуы мүмкін.</p><ul><li>Дерек шифрланбайды</li><li>Сервер сәйкестігі расталмайды</li><li>Құпия ақпарат үшін қауіпсіз емес</li></ul></section><div className="secure-arrow"><ArrowDownRight size={24}/><span>TLS қосылады</span></div><section className="card lesson-card featured"><div className="lesson-icon green">HTTPS</div><span className="eyebrow">ҚОРҒАЛҒАН АРНА</span><h2>HTTPS + TLS</h2><p>{t('http')}</p><ul><li>Трафик шифрланады</li><li>Хабарламаның тұтастығы қорғалады</li><li>Сертификат арқылы сервер тексеріледі</li></ul></section><section className="card steps-card"><span className="eyebrow">ҚОЛ АЛЫСУ РЕТІ</span>{[['01','Сертификат','Сервер сертификатын және ашық кілтін ұсынады.'],['02','Тексеру','Браузер сенімді CA тізбегі мен мерзімін тексереді.'],['03','Кілт келісімі','Клиент пен сервер ортақ сеанс құпиясын келіседі.'],['04','Шифрланған арна','Әрі қарайғы HTTP дерек TLS арқылы қорғалады.']].map(([n,h,p])=><div className="step-row" key={n}><b>{n}</b><div><strong>{h}</strong><span>{p}</span></div></div>)}</section></div>}{tab==='cert'&&<div className="card cert-card"><div className="cert-flow"><div className="key-card public"><Globe/><b>Ашық кілт</b><small>Сертификатпен таралады</small></div><div className="cert-arrow">байланыстырылады <ArrowDownRight/></div><div className="key-card cert"><FileText/><b>Сандық сертификат</b><small>Субъект + ашық кілт + CA қолтаңбасы</small></div><div className="cert-arrow">тексеріледі <ArrowDownRight/></div><div className="key-card ca"><ShieldCheck/><b>Сенімді CA</b><small>Сертификаттар тізбегі</small></div></div><div className="cert-explain"><div><span className="eyebrow">ЖАБЫҚ КІЛТ</span><p>Иесінің бақылауында қалады. Қол қою немесе сервер сәйкестігін дәлелдеу үшін қолданылады; оны ешкімге жіберуге болмайды.</p></div><div><span className="eyebrow">СЕРТИФИКАТТЫ ТЕКСЕРУ</span><p>{t('cert')} Мерзімі өтіп кеткен сертификат браузер ескертуін тудырады.</p></div></div></div>}{tab==='signature'&&<div className="signature-layout"><div className="signature-card card"><div className="signature-mark">ЭЦҚ</div><span className="eyebrow">ЭЛЕКТРОНДЫҚ ЦИФРЛЫҚ ҚОЛТАҢБА</span><h2>Авторлық пен тұтастықты растау</h2><p>{t('signature')}</p><div className="sign-steps"><div><span>1</span><b>Қол қою</b><small>Жабық кілт құжат хэшіне қол қояды.</small></div><ChevronRight/><div><span>2</span><b>Тексеру</b><small>Ашық кілт қолтаңбаның дұрыстығын тексереді.</small></div></div></div><div className="card legal-note"><ShieldCheck size={21}/><h3>Оқу мақсатындағы түсіндірме</h3><p>Бұл модуль криптография ұғымдарын түсіндіреді. Ол заңды күші бар Қазақстан ЭЦҚ-сын алмастырмайды және ешқандай нақты жабық кілтті қабылдамайды не сақтамайды.</p><span>Қазақстан Республикасының Ұлттық куәландырушы орталығы</span></div></div>}</>}
-function Policies(){const qc=useQueryClient();const q=useData<AnyRecord[]>('policies','/security-policies');const [done,setDone]=useState<string[]>([]);useEffect(()=>{if(q.data)setDone(q.data.filter(p=>p.acknowledgements?.length).map(p=>p.id))},[q.data]);const m=useMutation({mutationFn:(id:string)=>post(`/security-policies/${id}/acknowledgements`,{employee:'Демо пайдаланушы'}),onSuccess:()=>{void qc.invalidateQueries({queryKey:['policies']})}});const toggle=(p:AnyRecord)=>{if(done.includes(p.id))return;m.mutate(p.id)};return <><div className="policy-banner card"><div className="banner-icon"><LockKeyhole size={23}/></div><div><span className="eyebrow">ҚЫЗМЕТКЕРГЕ АРНАЛҒАН НҰСҚАУЛЫҚ</span><h2>Ақпаратты қорғаудың күнделікті ережелері</h2><p>Әр ережені оқығаннан кейін танысқаныңызды белгілеңіз. Өзгеріс серверде сақталады.</p></div><div className="completion-count"><b>{done.length}<small>/{q.data?.length||5}</small></b><span>таныстым</span></div></div><div className="policy-grid">{q.data?.map((p:any,i:number)=><article className={`card policy-card ${done.includes(p.id)?'acknowledged':''}`} key={p.id}><div className="policy-number">0{i+1}</div><h3>{p.title}</h3><p>{p.detail}</p><div className="do-dont"><div className="do"><b><Check size={13}/> ДҰРЫС</b><span>{p.example}</span></div><div className="dont"><b><X size={13}/> ЖАСАМАҢЫЗ</b><span>Ақпаратқа рұқсаты жоқ адамға пароль немесе құжатты бермеңіз.</span></div></div><button className={`button ${done.includes(p.id)?'ack-button':'secondary'}`} disabled={done.includes(p.id)||m.isPending} onClick={()=>toggle(p)}>{done.includes(p.id)?<><Check size={15}/>Таныстым</>:'Оқып шықтым, таныстым'}</button></article>)}</div><div className="awareness-note"><BookOpen size={18}/><span>Қауіпсіздік — ортақ жауапкершілік. Күмән туындаса, сілтемені ашпай, дереу жауапты адамға хабарлаңыз.</span></div></>}
-function Recommendations(){const qc=useQueryClient();const q=useData<AnyRecord[]>('recommendations','/recommendations');const m=useMutation({mutationFn:({id,status}:{id:string,status:string})=>patch(`/recommendations/${id}`,{status}),onSuccess:()=>{void qc.invalidateQueries({queryKey:['recommendations']});void qc.invalidateQueries({queryKey:['dashboard']})}});return <><div className="recommend-banner card"><div className="banner-icon amber"><Check size={23}/></div><div><span className="eyebrow">ЭӘСЕРІН БАҚЫЛАУ</span><h2>Тәуекелді азайтуға арналған ұсынымдар</h2><p>Орындалған ұсыным сақталған қалдық тәуекелді өзгертпейді. Нәтижені растау және қайта бағалау қажет.</p></div></div><div className="recommend-list">{q.data?.map(r=><article className="card recommendation" key={r.id}><div className={`priority-mark ${r.priority.toLowerCase()}`}/><div className="recommend-content"><div className="recommend-top"><span className="eyebrow">{r.risk?.asset?.name||'Ұйым деңгейі'} · {r.priority==='HIGH'?'ЖОҒАРЫ БАСЫМДЫҚ':'ОРТАША БАСЫМДЫҚ'}</span><Pill>{r.status==='COMPLETED'?'Орындалды':r.status==='IN_PROGRESS'?'Орындалуда':'Ашық'}</Pill></div><h3>{r.title}</h3><p>{r.description}</p><div className="recommend-detail"><div><b>Іске асыру қадамдары</b><span>{r.steps}</span></div><div><b>Күтілетін пайда</b><span>{r.expectedBenefit}</span></div><div><b>Жауапты</b><span>{r.responsible}</span></div></div><div className="recommend-actions">{r.risk&&<span>Қазіргі тәуекел: <b>{r.risk.score}/25</b> · <Pill severity={r.risk.severity}/></span>}<select value={r.status} onChange={e=>m.mutate({id:r.id,status:e.target.value})}><option value="OPEN">Ашық</option><option value="IN_PROGRESS">Орындалуда</option><option value="COMPLETED">Орындалды</option></select></div></div></article>)}</div></>}
-function Presentation(){const [slide,setSlide]=useState(0);const q=useData<DashboardSummary>('presentation-dashboard','/dashboard/summary');const assets=useData<{items:AnyRecord[]}>('presentation-assets','/assets?limit=100');const controls=useData<AnyRecord[]>('presentation-controls','/security-controls');const policies=useData<AnyRecord[]>('presentation-policies','/security-policies');const risks=q.data?.risks||[];const slides=[{label:'Ұйым профилі',title:'Smart Education',body:'12 қызметкері бар модельдік оқу орталығы. 10 үстел компьютері · 3 ноутбук · Wi-Fi · желілік принтер · Google Drive · корпоративтік пошта.',icon:BuildingVisual},{label:'Активтер',title:'8 негізгі ақпараттық актив',body:(assets.data?.items||[]).map(a=>a.name).join(' · '),icon:Computer},{label:'Басым тәуекелдер',title:'Қай тұсты күшейту қажет?',body:risks.slice(0,3).map(r=>`${r.asset.name} · ${r.score}/25`).join('\n')||'Бағалау жүктелуде',icon:TriangleAlert},{label:'Қорғаныс',title:'5 қорғаныс шарасы',body:(controls.data||[]).map(c=>`${c.name} — ${c.status==='NOT_STARTED'?'басталмаған':c.status==='VERIFIED'?'тексерілген':'орындалуда'}`).join('\n'),icon:ShieldCheck},{label:'Желі және сенім',title:'HTTPS · сертификат · ЭЦҚ',body:'TLS байланысы шифрланады. Сертификат ашық кілтті тексереді. ЭЦҚ құжат тұтастығын жабық және ашық кілт арқылы растауға көмектеседі.',icon:Network},{label:'Қызметкер ережелері',title:'Қызметкерге арналған бес ереже',body:(policies.data||[]).map((p:any,i:number)=>`${i+1}. ${p.title}`).join('\n'),icon:BookOpen},{label:'Қорытынды',title:'Қауіпсіздік — үздіксіз үдеріс',body:'Қызметкерлерді оқыту · қолжетімділікті шектеу · резервтік көшірме · қайта бағалау. Бұл — оқу моделіндегі қолмен енгізілген сценарий.',icon:Shield}];const next=(n:number)=>setSlide(Math.max(0,Math.min(slides.length-1,n)));useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='ArrowRight')next(slide+1);if(e.key==='ArrowLeft')next(slide-1);if(e.key==='Escape')window.location.href='/'};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[slide]);const Icon=slides[slide].icon;return <div className="presentation-shell"><div className="pres-top"><div className="brand-mark"><Shield size={19}/></div><b>CyberGuard <span>·</span> ЖОБАНЫ ҚОРҒАУ</b><button className="icon-btn" onClick={()=>window.location.href='/'}><X size={19}/></button></div><div className="pres-content"><div className="pres-count">{String(slide+1).padStart(2,'0')} <span>/ {String(slides.length).padStart(2,'0')}</span></div><div className="pres-icon"><Icon size={39}/></div><span className="eyebrow">{slides[slide].label}</span><h1>{slides[slide].title}</h1><p>{slides[slide].body}</p>{slide===2&&<div className="pres-risk-list">{risks.slice(0,3).map(r=><span key={r.id}><b>{r.asset.name}</b><strong>{r.score}/25</strong><small>{r.mitigation}</small><Pill severity={r.severity as Severity}/></span>)}</div>}</div><div className="pres-bottom"><div className="pres-dots">{slides.map((s,i)=><button key={s.label} className={i===slide?'active':''} onClick={()=>next(i)} aria-label={`${i+1}-слайд`}/>)}</div><span>← → пернелерімен ауысу</span><div><button className="button secondary" disabled={slide===0} onClick={()=>next(slide-1)}><ChevronLeft size={15}/>Артқа</button><button className="button primary" disabled={slide===slides.length-1} onClick={()=>next(slide+1)}>Келесі<ChevronRight size={15}/></button></div></div></div>}
-function BuildingVisual(){return <div className="building-visual"><Monitor/><Wifi/><Cloud/><Shield/></div>}
+import { useEffect, useState } from "react";
+import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import {
+  Activity,
+  ArrowDownRight,
+  ArrowUpRight,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Cloud,
+  Computer,
+  FileText,
+  Globe,
+  Home,
+  LockKeyhole,
+  Menu,
+  Monitor,
+  Moon,
+  Network,
+  Plus,
+  Search,
+  Shield,
+  ShieldCheck,
+  Sun,
+  TriangleAlert,
+  Wifi,
+  X,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  Background,
+  Controls as FlowControls,
+  ReactFlow,
+  type Edge,
+  type Node,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  severityLabel,
+  severityFor,
+  riskScore,
+  type Severity,
+  type AssetDto,
+  type DashboardSummary,
+} from "@cyberguard/shared";
+import { get, patch, post, api } from "./api";
+type AnyRecord = Record<string, any>;
+const links = [
+  ["/", "overview", Home],
+  ["/assets", "assets", Monitor],
+  ["/risks", "risks", TriangleAlert],
+  ["/controls", "controls", ShieldCheck],
+  ["/topology", "topology", Network],
+  ["/learning", "learning", LockKeyhole],
+  ["/policies", "policies", BookOpen],
+  ["/recommendations", "recommendations", Check],
+  ["/presentation", "presentation", Activity],
+] as const;
+const colors: Record<Severity, string> = {
+  LOW: "#22c55e",
+  MEDIUM: "#f59e0b",
+  HIGH: "#ef4444",
+};
+function Pill({
+  severity,
+  children,
+}: {
+  severity?: Severity;
+  children?: React.ReactNode;
+}) {
+  const label = severity
+    ? severityLabel[
+        (localStorage.getItem("cyberguard-language") || "kk") as
+          | "kk"
+          | "ru"
+          | "en"
+      ][severity]
+    : children;
+  return (
+    <span className={`pill ${severity?.toLowerCase() || ""}`}>
+      <i />
+      {label}
+    </span>
+  );
+}
+function App() {
+  const { t, i18n } = useTranslation();
+  const [dark, setDark] = useState(
+    localStorage.getItem("cyberguard-theme") === "dark",
+  );
+  const [mobile, setMobile] = useState(false);
+  const location = useLocation();
+  const titleKey =
+    links.find((x) => x[0] === location.pathname)?.[1] ?? "overview";
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    localStorage.setItem("cyberguard-theme", dark ? "dark" : "light");
+  }, [dark]);
+  const setLang = (v: string) => {
+    void i18n.changeLanguage(v);
+    localStorage.setItem("cyberguard-language", v);
+    document.documentElement.lang = v;
+  };
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${mobile ? "mobile-open" : ""}`}>
+        <div className="brand">
+          <div className="brand-mark">
+            <Shield size={21} />
+          </div>
+          <div>
+            <b>CyberGuard</b>
+            <small>SECURITY ASSESSMENT</small>
+          </div>
+          <button
+            className="icon-btn mobile-close"
+            onClick={() => setMobile(false)}
+          >
+            <X size={17} />
+          </button>
+        </div>
+        <div className="org-switch">
+          <div className="org-avatar">SE</div>
+          <div>
+            <b>Smart Education</b>
+            <small>Ұйым кеңістігі</small>
+          </div>
+          <ChevronDown size={15} />
+        </div>
+        <div className="nav-label">WORKSPACE</div>
+        <nav>
+          {links.map(([to, key, Icon]) => (
+            <NavLink
+              end={to === "/"}
+              key={to}
+              to={to}
+              onClick={() => setMobile(false)}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <Icon size={17} />
+              <span>{t(`nav.${key}`)}</span>
+              {key === "risks" && <span className="nav-dot" />}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="sidebar-bottom">
+          <div className="demo-badge">
+            <span className="pulse" />
+            <div>
+              <b>Оқу режимі</b>
+              <small>Симуляцияланған деректер</small>
+            </div>
+          </div>
+          <div className="user">
+            <div className="user-avatar">SA</div>
+            <div>
+              <b>Студент аккаунты</b>
+              <small>Жергілікті демонстрация</small>
+            </div>
+            <ChevronDown size={15} />
+          </div>
+        </div>
+      </aside>
+      <main className="main-area">
+        <header className="topbar">
+          <div className="top-left">
+            <button
+              className="icon-btn menu-btn"
+              onClick={() => setMobile(true)}
+            >
+              <Menu size={19} />
+            </button>
+            <div className="crumb">
+              Басты бет <ChevronRight size={13} />
+              <b>{t(`nav.${titleKey}`)}</b>
+            </div>
+          </div>
+          <div className="top-actions">
+            <div className="searchbox">
+              <Search size={15} />
+              <input
+                placeholder={t("search") + "…"}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.currentTarget.value)
+                    window.location.href =
+                      "/assets?search=" +
+                      encodeURIComponent(e.currentTarget.value);
+                }}
+              />
+              <kbd>⌘ K</kbd>
+            </div>
+            <select
+              aria-label={t("language")}
+              value={i18n.language}
+              onChange={(e) => setLang(e.target.value)}
+            >
+              <option value="kk">ҚАЗ</option>
+              <option value="ru">РУС</option>
+              <option value="en">ENG</option>
+            </select>
+            <button
+              className="icon-btn"
+              aria-label={t("theme")}
+              onClick={() => setDark(!dark)}
+            >
+              {dark ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+            <div className="top-avatar">SA</div>
+          </div>
+        </header>
+        <div className="page">
+          <div className="page-heading">
+            <div>
+              <div className="eyebrow">
+                SMART EDUCATION <span>•</span> SECURITY CENTER
+              </div>
+              <h1>{t(`nav.${titleKey}`)}</h1>
+              <p>{titleKey === "overview" ? t("subtitle") : t("simulated")}</p>
+            </div>
+            <div className="heading-date">
+              <span className="live-dot" />
+              ОҚУ ДЕРЕКТЕРІ&nbsp; · &nbsp;
+              {new Date().toLocaleDateString("kk-KZ", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })}
+            </div>
+          </div>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/assets" element={<Assets />} />
+            <Route path="/risks" element={<Risks />} />
+            <Route path="/controls" element={<Controls />} />
+            <Route path="/topology" element={<Topology />} />
+            <Route path="/learning" element={<Learning />} />
+            <Route path="/policies" element={<Policies />} />
+            <Route path="/recommendations" element={<Recommendations />} />
+            <Route path="/presentation" element={<Presentation />} />
+            <Route path="*" element={<Dashboard />} />
+          </Routes>
+          <footer>
+            © 2026 CyberGuard{" "}
+            <span>Оқу мақсатындағы жоба · Нақты сканерлеу жүргізілмейді</span>
+          </footer>
+        </div>
+      </main>
+    </div>
+  );
+}
+function useData<T>(key: string, url: string) {
+  return useQuery({ queryKey: [key], queryFn: () => get<T>(url) });
+}
+function ErrorState({ message }: { message: string }) {
+  return (
+    <div className="empty-state">
+      <TriangleAlert size={22} />
+      <b>{message}</b>
+      <span>API сервері мен PostgreSQL қосылымын тексеріңіз.</span>
+    </div>
+  );
+}
+function Stat({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  accent,
+  change,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub: string;
+  icon: typeof Shield;
+  accent: string;
+  change?: string;
+}) {
+  return (
+    <article className="stat-card">
+      <div className="stat-top">
+        <span>{label}</span>
+        <span
+          className="stat-icon"
+          style={{ color: accent, background: `${accent}18` }}
+        >
+          <Icon size={17} />
+        </span>
+      </div>
+      <div className="stat-value">{value}</div>
+      <div className="stat-sub">
+        <span style={{ color: accent }}>{change}</span> {sub}
+      </div>
+    </article>
+  );
+}
+function Dashboard() {
+  const { t } = useTranslation();
+  const q = useData<DashboardSummary>("dashboard", "/dashboard/summary");
+  const trend = useData<AnyRecord[]>("trend", "/dashboard/risk-trends");
+  const dist = useData<AnyRecord[]>(
+    "distribution",
+    "/dashboard/risk-distribution",
+  );
+  const assets = useData<{ items: AssetDto[] }>("assets", "/assets?limit=100");
+  if (q.isLoading)
+    return (
+      <div className="loading-grid">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div className="skeleton" key={i} />
+        ))}
+      </div>
+    );
+  if (q.isError || !q.data) return <ErrorState message={t("error")} />;
+  const d = q.data;
+  const categories = Object.entries(
+    (assets.data?.items || []).reduce<Record<string, number>>((a, x) => {
+      a[x.category] = (a[x.category] || 0) + 1;
+      return a;
+    }, {}),
+  ).map(([category, count]) => ({ category, count }));
+  return (
+    <>
+      <div className="welcome-row">
+        <div className="welcome-icon">
+          <ShieldCheck size={20} />
+        </div>
+        <div>
+          <h2>
+            {t("welcome")}, команда Smart Education <span>✦</span>
+          </h2>
+          <p>{t("profile")} · бағалау күйі бүгін жаңартылды</p>
+        </div>
+        <button
+          className="button secondary"
+          onClick={() => (window.location.href = "/presentation")}
+        >
+          <Activity size={16} />
+          Таныстырылымды ашу
+        </button>
+        <button
+          className="button primary"
+          onClick={() => window.open("/api/reports/academic.pdf", "_blank")}
+        >
+          <FileText size={15} />
+          {t("exportPdf")}
+        </button>
+      </div>
+      <div className="stats-grid">
+        <Stat
+          label={t("score")}
+          value={
+            <>
+              {d.securityScore}
+              <small>/100</small>
+            </>
+          }
+          sub="орташа тәуекелге негізделген"
+          icon={ShieldCheck}
+          accent="#3b82f6"
+          change="↗"
+        />
+        <Stat
+          label={t("assetsCount")}
+          value={d.assetCount.toString().padStart(2, "0")}
+          sub="ұйым тізімдемесінде"
+          icon={Monitor}
+          accent="#8b5cf6"
+        />
+        <Stat
+          label={t("risksCount")}
+          value={d.riskCount.toString().padStart(2, "0")}
+          sub="қолмен бағаланған"
+          icon={Activity}
+          accent="#06b6d4"
+        />
+        <Stat
+          label={t("high")}
+          value={d.high.toString().padStart(2, "0")}
+          sub="басым әрекетті қажет етеді"
+          icon={TriangleAlert}
+          accent="#ef4444"
+          change="!"
+        />
+        <Stat
+          label={t("controls")}
+          value={`${d.controlsComplete}/${d.controlCount}`}
+          sub="шара енгізілді немесе тексерілді"
+          icon={Shield}
+          accent="#22c55e"
+        />
+        <Stat
+          label={t("openRecs")}
+          value={d.openRecommendations.toString().padStart(2, "0")}
+          sub="орындалуын күтуде"
+          icon={Check}
+          accent="#f59e0b"
+        />
+      </div>
+      <div className="charts-grid">
+        <section className="card chart-card">
+          <div className="card-heading">
+            <div>
+              <h3>{t("riskDistribution")}</h3>
+              <p>Қазіргі бағалаулардың саны</p>
+            </div>
+            <span className="tag">Ағымдағы күй</span>
+          </div>
+          <div className="donut-wrap">
+            <ResponsiveContainer width="58%" height={190}>
+              <PieChart>
+                <Pie
+                  data={(dist.data || []).map((x) => ({
+                    name: severityLabel[
+                      (localStorage.getItem("cyberguard-language") || "kk") as
+                        | "kk"
+                        | "ru"
+                        | "en"
+                    ][x.severity as Severity],
+                    value: x.count,
+                    severity: x.severity,
+                  }))}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={55}
+                  outerRadius={82}
+                  paddingAngle={4}
+                >
+                  <Cell fill="#ef4444" />
+                  <Cell fill="#f59e0b" />
+                  <Cell fill="#22c55e" />
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="donut-center">
+              <b>{d.riskCount}</b>
+              <small>тәуекел</small>
+            </div>
+          </div>
+          <div className="legend">
+            {(dist.data || []).map((x) => (
+              <div key={x.severity}>
+                <i style={{ background: colors[x.severity as Severity] }} />
+                {
+                  severityLabel[
+                    (localStorage.getItem("cyberguard-language") || "kk") as
+                      | "kk"
+                      | "ru"
+                      | "en"
+                  ][x.severity as Severity]
+                }
+                <b>{x.count}</b>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="card chart-card trend-card">
+          <div className="card-heading">
+            <div>
+              <h3>{t("riskTrend")}</h3>
+              <p>Сақталған қайта бағалау тарихы</p>
+            </div>
+            <span className="chart-period">Тарихи дерек</span>
+          </div>
+          {trend.data?.length ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={trend.data}>
+                <defs>
+                  <linearGradient id="riskGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#6366f1" stopOpacity={0.26} />
+                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 5"
+                  stroke="var(--chart-grid)"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  domain={[0, 25]}
+                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip />
+                <Area
+                  type="monotone"
+                  dataKey="averageRisk"
+                  stroke="#6366f1"
+                  strokeWidth={2.5}
+                  fill="url(#riskGradient)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="chart-empty">
+              Қайта бағалау тіркелгенде тарихи тренд пайда болады.
+            </div>
+          )}
+        </section>
+        <section className="card chart-card">
+          <div className="card-heading">
+            <div>
+              <h3>Активтер санаты</h3>
+              <p>Тіркелімдегі бөлініс</p>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={185}>
+            <BarChart
+              data={categories}
+              margin={{ left: -20, right: 8, top: 8 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 5"
+                stroke="var(--chart-grid)"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="category"
+                tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip />
+              <Bar dataKey="count" fill="#6366f1" radius={[5, 5, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+        <section className="card chart-card">
+          <div className="card-heading">
+            <div>
+              <h3>Қорғаныс шаралары</h3>
+              <p>Енгізілу барысы</p>
+            </div>
+            <b className="progress-label">
+              {d.controlCount
+                ? Math.round((d.controlsComplete / d.controlCount) * 100)
+                : 0}
+              %
+            </b>
+          </div>
+          <div className="progress-track">
+            <span
+              style={{
+                width: `${d.controlCount ? (d.controlsComplete / d.controlCount) * 100 : 0}%`,
+              }}
+            />
+          </div>
+          <div className="control-summary">
+            <ShieldCheck size={17} />
+            <div>
+              <b>
+                {d.controlsComplete} / {d.controlCount} орындалды
+              </b>
+              <small>Енгізілген немесе тексерілген шара</small>
+            </div>
+          </div>
+          <NavLink to="/controls" className="text-link">
+            Барлық шараны көру <ChevronRight size={14} />
+          </NavLink>
+        </section>
+      </div>
+      <section className="card table-card">
+        <div className="card-heading">
+          <div>
+            <h3>{t("recentRisks")}</h3>
+            <p>Ағымдағы басымдықтар</p>
+          </div>
+          <NavLink className="text-link" to="/risks">
+            Барлығын көру <ChevronRight size={14} />
+          </NavLink>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>АКТИВ</th>
+                <th>ҚАУІП</th>
+                <th>ҰПАЙ</th>
+                <th>ДЕҢГЕЙ</th>
+                <th>КҮЙІ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.risks.map((r) => (
+                <tr key={r.id}>
+                  <td>
+                    <b>{r.asset.name}</b>
+                    <small>Симуляцияланған бағалау</small>
+                  </td>
+                  <td>{r.threat.name}</td>
+                  <td>
+                    <b>{r.score}</b>
+                    <small>/25</small>
+                  </td>
+                  <td>
+                    <Pill severity={r.severity as Severity} />
+                  </td>
+                  <td>
+                    <span className="status-dot">●</span> Бағаланған
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section className="card table-card">
+        <div className="card-heading">
+          <div>
+            <h3>{t("recentActivity")}</h3>
+            <p>?????????? ????????? ????? ??????????</p>
+          </div>
+        </div>
+        <div className="activity-list">
+          {d.activities.length ? (
+            d.activities.map((a) => (
+              <div className="activity-row" key={a.id}>
+                <span className="activity-icon">
+                  <Activity size={14} />
+                </span>
+                <div>
+                  <b>{a.details || a.action + " ? " + a.entity}</b>
+                  <small>{a.entity} ? сақталған өзгеріс</small>
+                </div>
+                <time>{new Date(a.createdAt).toLocaleString()}</time>
+              </div>
+            ))
+          ) : (
+            <div className="chart-empty">Әзірге әрекет жоқ</div>
+          )}
+        </div>
+      </section>
+      <div className="disclaimer">
+        <Shield size={16} />
+        <span>
+          {t("simulated")}. Көрсеткіш 100 − орташа тәуекел × 4 формуласы бойынша
+          есептеледі.
+        </span>
+        <NavLink to="/risks">
+          Әдістеме <ChevronRight size={14} />
+        </NavLink>
+      </div>
+    </>
+  );
+}
+const assetSchema = z.object({
+  name: z.string().min(2),
+  description: z.string().min(5),
+  category: z.string().min(2),
+  owner: z.string().min(2),
+  criticality: z.coerce.number().min(1).max(5),
+});
+type AssetForm = z.infer<typeof assetSchema>;
+function Assets() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const [term, setTerm] = useState("");
+  const [category, setCategory] = useState("");
+  const [severity, setSeverity] = useState("");
+  const [sort, setSort] = useState("name");
+  const [page, setPage] = useState(1);
+  const [dialog, setDialog] = useState(false);
+  const [edit, setEdit] = useState<AnyRecord | null>(null);
+  const [selected, setSelected] = useState<AnyRecord | null>(null);
+  const data = useQuery({
+    queryKey: ["assets", term, category, severity, sort, page],
+    queryFn: () =>
+      get<{ items: AnyRecord[]; total: number }>(
+        `/assets?limit=12&page=${page}&search=${encodeURIComponent(term)}&category=${encodeURIComponent(category)}&severity=${severity}&sort=${sort}`,
+      ),
+  });
+  const cats = [...new Set((data.data?.items || []).map((a) => a.category))];
+  const mutation = useMutation({
+    mutationFn: (v: AssetForm) =>
+      edit ? patch(`/assets/${edit.id}`, v) : post("/assets", v),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["assets"] });
+      setDialog(false);
+      setEdit(null);
+    },
+  });
+  const del = useMutation({
+    mutationFn: (id: string) => api.delete(`/assets/${id}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["assets"] });
+      setSelected(null);
+    },
+  });
+  if (data.isError) return <ErrorState message={t("error")} />;
+  return (
+    <>
+      <div className="toolbar">
+        <div className="filter-search">
+          <Search size={15} />
+          <input
+            placeholder="Актив атауымен іздеу…"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+          />
+        </div>
+        <select value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">Барлық санат</option>
+          {cats.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        <select value={severity} onChange={(e) => setSeverity(e.target.value)}>
+          <option value="">Барлық деңгей</option>
+          <option value="HIGH">Жоғары тәуекел</option>
+          <option value="MEDIUM">Орташа тәуекел</option>
+          <option value="LOW">Төмен тәуекел</option>
+        </select>
+        <select value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="name">Сұрыптау: атауы</option>
+          <option value="name-desc">Кері атау</option>
+          <option value="risk">Тәуекел саны</option>
+        </select>
+        <button
+          className="button primary"
+          onClick={() => {
+            setEdit(null);
+            setDialog(true);
+          }}
+        >
+          <Plus size={16} />
+          {t("addAsset")}
+        </button>
+      </div>
+      {data.isLoading ? (
+        <div className="skeleton tall" />
+      ) : (
+        <div className="asset-grid">
+          {data.data?.items.map((a: any) => {
+            const r = a.risks?.[0];
+            return (
+              <article key={a.id} className="card asset-card">
+                <div className="asset-icon">
+                  <Monitor size={19} />
+                  <span className="criticality">{a.criticality}/5</span>
+                </div>
+                <div className="asset-card-title">
+                  <h3>{a.name}</h3>
+                  <p>{a.category}</p>
+                </div>
+                <p className="asset-description">{a.description}</p>
+                <div className="asset-meta">
+                  <span>
+                    <b>Жауапты</b>
+                    {a.owner}
+                  </span>
+                  <span>
+                    <b>Қауіп ұпайы</b>
+                    {r ? (
+                      <>
+                        <strong>{r.score}/25</strong>
+                        <Pill severity={r.severity} />
+                      </>
+                    ) : (
+                      "Бағалау жоқ"
+                    )}
+                  </span>
+                </div>
+                <div className="asset-actions">
+                  <button className="text-link" onClick={() => setSelected(a)}>
+                    Толығырақ <ChevronRight size={14} />
+                  </button>
+                  <button
+                    className="icon-btn"
+                    title={t("edit")}
+                    onClick={() => {
+                      setEdit(a);
+                      setDialog(true);
+                    }}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className="icon-btn danger"
+                    title={t("delete")}
+                    onClick={() => {
+                      if (confirm(`«${a.name}» активін жоясыз ба?`))
+                        del.mutate(a.id);
+                    }}
+                  >
+                    ⌫
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+      {(data.data?.total || 0) > 12 && (
+        <div className="pagination">
+          <button
+            className="button secondary"
+            disabled={page <= 1}
+            onClick={() => setPage(page - 1)}
+          >
+            <ChevronLeft size={14} />
+            ???????
+          </button>
+          <span>
+            {page} / {Math.ceil((data.data?.total || 0) / 12)}
+          </span>
+          <button
+            className="button secondary"
+            disabled={page >= Math.ceil((data.data?.total || 0) / 12)}
+            onClick={() => setPage(page + 1)}
+          >
+            ??????
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
+      {!data.data?.items.length && (
+        <div className="empty-state">{t("empty")}</div>
+      )}
+      {dialog && (
+        <AssetDialog
+          initial={edit}
+          onClose={() => {
+            setDialog(false);
+            setEdit(null);
+          }}
+          onSave={(v) => mutation.mutate(v)}
+          busy={mutation.isPending}
+          error={
+            mutation.isError
+              ? "Өзгерісті сақтау мүмкін болмады. Демо режимін тексеріңіз."
+              : ""
+          }
+        />
+      )}
+      {selected && (
+        <div className="overlay" onClick={() => setSelected(null)}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-head">
+              <div>
+                <span className="eyebrow">АКТИВ ПРОФИЛІ</span>
+                <h2>{selected.name}</h2>
+              </div>
+              <button className="icon-btn" onClick={() => setSelected(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <p>{selected.description}</p>
+            <div className="detail-grid">
+              <span>
+                Санат<b>{selected.category}</b>
+              </span>
+              <span>
+                Жауапты<b>{selected.owner}</b>
+              </span>
+              <span>
+                Маңыздылығы<b>{selected.criticality}/5</b>
+              </span>
+              <span>
+                Жасалған күні
+                <b>
+                  {new Date(selected.createdAt).toLocaleDateString("kk-KZ")}
+                </b>
+              </span>
+            </div>
+            {selected.risks?.map((r: any) => (
+              <div className="risk-strip" key={r.id}>
+                <Pill severity={r.severity} />
+                <b>{r.threat?.name}</b>
+                <span>{r.score}/25</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+function AssetDialog({
+  initial,
+  onClose,
+  onSave,
+  busy,
+  error,
+}: {
+  initial: AnyRecord | null;
+  onClose: () => void;
+  onSave: (v: AssetForm) => void;
+  busy: boolean;
+  error: string;
+}) {
+  const { t } = useTranslation();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<AssetForm>({
+    resolver: zodResolver(assetSchema),
+    defaultValues: initial
+      ? { ...initial, criticality: Number(initial.criticality) }
+      : {
+          name: "",
+          description: "",
+          category: "Құрылғы",
+          owner: "Әкімшілік",
+          criticality: 3,
+        },
+  });
+  return (
+    <div className="overlay" onClick={onClose}>
+      <form
+        className="dialog form-dialog"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleSubmit(onSave)}
+      >
+        <div className="dialog-head">
+          <div>
+            <span className="eyebrow">АКТИВ ТІЗІМДЕМЕСІ</span>
+            <h2>{initial ? t("edit") + " актив" : "Жаңа актив"}</h2>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        {[
+          ["name", "Атауы"],
+          ["description", "Сипаттамасы"],
+          ["category", "Санаты"],
+          ["owner", "Жауапты тұлға"],
+          ["criticality", "Маңыздылығы (1–5)"],
+        ].map(([k, l]) => (
+          <label className="field" key={k}>
+            {l}
+            <input
+              type={k === "criticality" ? "number" : "text"}
+              min="1"
+              max="5"
+              {...register(k as keyof AssetForm)}
+            />
+            {errors[k as keyof AssetForm] && (
+              <small className="field-error">
+                Міндетті өрісті дұрыс толтырыңыз
+              </small>
+            )}
+          </label>
+        ))}
+        {error && <div className="form-error">{error}</div>}
+        <div className="dialog-actions">
+          <button className="button secondary" type="button" onClick={onClose}>
+            {t("cancel")}
+          </button>
+          <button className="button primary" disabled={busy}>
+            {busy ? "Сақталуда…" : t("save")}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+function Risks() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const [chosen, setChosen] = useState<AnyRecord | null>(null);
+  const [assetId, setAsset] = useState("");
+  const [likelihood, setLikelihood] = useState(3);
+  const [impact, setImpact] = useState(3);
+  const [justification, setJustification] = useState(
+    "Оқу сценарийіне негізделген қолмен бағалау",
+  );
+  const [consequence, setConsequence] = useState("");
+  const [mitigation, setMitigation] = useState("");
+  const data = useData<AnyRecord[]>("risks", "/risks");
+  const assets = useData<{ items: AnyRecord[] }>(
+    "assets-all",
+    "/assets?limit=100",
+  );
+  const selectedAsset = assets.data?.items.find(
+    (a: any) => a.id === (chosen?.assetId || assetId),
+  );
+  const threat = selectedAsset?.threats?.[0];
+  const vulnerability = threat?.vulnerabilities?.[0];
+  const score = riskScore(likelihood, impact),
+    severity = severityFor(score);
+  const mutation = useMutation({
+    mutationFn: () =>
+      chosen
+        ? patch(`/risks/${chosen.id}`, {
+            assetId: chosen.assetId,
+            threatId: chosen.threatId,
+            vulnerabilityId: chosen.vulnerabilityId,
+            likelihood,
+            impact,
+            justification,
+            consequence: consequence || chosen.consequence,
+            mitigation: mitigation || chosen.mitigation,
+          })
+        : post("/risks", {
+            assetId,
+            threatId: threat?.id,
+            vulnerabilityId: vulnerability?.id,
+            likelihood,
+            impact,
+            justification,
+            consequence,
+            mitigation,
+          }),
+    onSuccess: () => {
+      void qc.invalidateQueries();
+      setChosen(null);
+    },
+  });
+  const start = (r?: AnyRecord) => {
+    setChosen(r || null);
+    setAsset(r?.assetId || assets.data?.items[0]?.id || "");
+    setLikelihood(r?.likelihood || 3);
+    setImpact(r?.impact || 3);
+    setJustification(r?.justification || "");
+    setConsequence(r?.consequence || "");
+    setMitigation(r?.mitigation || "");
+  };
+  return (
+    <>
+      <div className="risk-header card">
+        <div>
+          <span className="eyebrow">5 × 5 ТӘУЕКЕЛ ӘДІСІ</span>
+          <h2>Ықтималдық × әсер = тәуекел</h2>
+          <p>
+            Білім беру мақсатындағы модель; әмбебап ресми стандарт болып
+            саналмайды.
+          </p>
+        </div>
+        <div className="thresholds">
+          <span className="low">1–4 · Төмен</span>
+          <span className="medium">5–9 · Орташа</span>
+          <span className="high">10–25 · Жоғары</span>
+        </div>
+      </div>
+      <div className="risk-layout">
+        <section className="card assessment-card">
+          <div className="card-heading">
+            <div>
+              <h3>
+                {chosen ? "Бағалауды қайта қарау" : "Жаңа тәуекелді бағалау"}
+              </h3>
+              <p>Бағалау деректері серверде сақталады</p>
+            </div>
+            <span className="tag">Тікелей есептеу</span>
+          </div>
+          <label className="field">
+            Ақпараттық актив
+            <select
+              disabled={!!chosen}
+              value={chosen?.assetId || assetId}
+              onChange={(e) => setAsset(e.target.value)}
+            >
+              {assets.data?.items.map((a: any) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="relationship">
+            <span>
+              {t("threat")}
+              <b>
+                {threat?.name || chosen?.threat?.name || "Активті таңдаңыз"}
+              </b>
+            </span>
+            <ChevronRight size={15} />
+            <span>
+              {t("vulnerability")}
+              <b>{vulnerability?.name || chosen?.vulnerability?.name || "—"}</b>
+            </span>
+          </div>
+          <label className="slider-field">
+            {t("likelihood")} <b>{likelihood}/5</b>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              value={likelihood}
+              onChange={(e) => setLikelihood(Number(e.target.value))}
+            />
+            <div className="range-labels">
+              <span>Өте төмен</span>
+              <span>Өте жоғары</span>
+            </div>
+          </label>
+          <label className="slider-field">
+            {t("impact")} <b>{impact}/5</b>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              value={impact}
+              onChange={(e) => setImpact(Number(e.target.value))}
+            />
+            <div className="range-labels">
+              <span>Елеусіз</span>
+              <span>Өте ауыр</span>
+            </div>
+          </label>
+          <div
+            className="live-score"
+            style={{ "--risk-color": colors[severity] } as React.CSSProperties}
+          >
+            <div>
+              <span>ТӘУЕКЕЛ ҰПАЙЫ</span>
+              <strong>
+                {score}
+                <small>/25</small>
+              </strong>
+              <Pill severity={severity} />
+            </div>
+            <MiniMatrix likelihood={likelihood} impact={impact} />
+          </div>
+          <label className="field">
+            {t("consequence")}
+            <textarea
+              value={consequence}
+              onChange={(e) => setConsequence(e.target.value)}
+              placeholder="Оқиға болса қандай салдар туындауы мүмкін?"
+            />
+          </label>
+          <label className="field">
+            {t("justification")}
+            <textarea
+              value={justification}
+              onChange={(e) => setJustification(e.target.value)}
+            />
+          </label>
+          <label className="field">
+            {t("mitigation")}
+            <textarea
+              value={mitigation}
+              onChange={(e) => setMitigation(e.target.value)}
+              placeholder="Ұсынылатын қорғаныс шаралары"
+            />
+          </label>
+          <div className="button-row">
+            <button className="button secondary" onClick={() => start()}>
+              {chosen ? "Болдырмау" : "Тазарту"}
+            </button>
+            <button
+              className="button primary"
+              disabled={
+                mutation.isPending || (!assetId && !chosen) || !justification
+              }
+              onClick={() => mutation.mutate()}
+            >
+              <Check size={15} />
+              {chosen ? "Қайта бағалауды сақтау" : "Бағалауды сақтау"}
+            </button>
+          </div>
+          {mutation.isError && (
+            <p className="form-error">
+              Бағалауды сақтау мүмкін болмады. Актив байланыстарын және демо
+              баптауларын тексеріңіз.
+            </p>
+          )}
+        </section>
+        <section className="card matrix-card">
+          <div className="card-heading">
+            <div>
+              <h3>5 × 5 тәуекел матрицасы</h3>
+              <p>Әсер ↑ · Ықтималдық →</p>
+            </div>
+          </div>
+          <Matrix activeL={likelihood} activeI={impact} />
+          <div className="matrix-legend">
+            <Pill severity="LOW" />
+            <Pill severity="MEDIUM" />
+            <Pill severity="HIGH" />
+          </div>
+          <div className="matrix-note">
+            <ShieldCheck size={16} />
+            <span>Түстер сақталған оқу бағалауларының деңгейін көрсетеді.</span>
+          </div>
+          <div className="existing-heatmap">
+            <b>????????? ????????????? ???? ???????</b>
+            <ExistingHeatmap risks={data.data || []} />
+          </div>
+        </section>
+      </div>
+      <section className="card table-card">
+        <div className="card-heading">
+          <div>
+            <h3>Сақталған бағалаулар</h3>
+            <p>Бағалау тарихын нұсқамен қарау</p>
+          </div>
+          <span className="tag">{data.data?.length || 0} жазба</span>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>АКТИВ</th>
+                <th>ҚАУІП → ОСАЛДЫҚ</th>
+                <th>Ы × Ә</th>
+                <th>ҰПАЙ</th>
+                <th>ДЕҢГЕЙ</th>
+                <th>ӘРЕКЕТ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.data?.map((r: any) => (
+                <tr key={r.id}>
+                  <td>
+                    <b>{r.asset.name}</b>
+                  </td>
+                  <td>
+                    {r.threat.name}
+                    <small>{r.vulnerability.name}</small>
+                  </td>
+                  <td>
+                    {r.likelihood} × {r.impact}
+                  </td>
+                  <td>
+                    <b>{r.score}/25</b>
+                  </td>
+                  <td>
+                    <Pill severity={r.severity} />
+                  </td>
+                  <td>
+                    <button className="text-link" onClick={() => start(r)}>
+                      Қайта бағалау <ChevronRight size={13} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
+  );
+}
+function MiniMatrix({
+  likelihood,
+  impact,
+}: {
+  likelihood: number;
+  impact: number;
+}) {
+  return (
+    <div className="mini-matrix">
+      {[5, 4, 3, 2, 1].flatMap((i) =>
+        [1, 2, 3, 4, 5].map((l) => (
+          <span
+            key={`${i}-${l}`}
+            className={`${severityFor(l * i).toLowerCase()} ${l === likelihood && i === impact ? "selected" : ""}`}
+          />
+        )),
+      )}
+    </div>
+  );
+}
+function ExistingHeatmap({ risks }: { risks: AnyRecord[] }) {
+  const [cell, setCell] = useState<[number, number] | null>(null);
+  const entries = [5, 4, 3, 2, 1].flatMap((impact) =>
+    [1, 2, 3, 4, 5].map((likelihood) => ({
+      impact,
+      likelihood,
+      matches: risks.filter(
+        (r) => r.likelihood === likelihood && r.impact === impact,
+      ),
+    })),
+  );
+  const chosen = cell
+    ? entries.find((x) => x.likelihood === cell[0] && x.impact === cell[1])
+    : null;
+  return (
+    <>
+      <div className="heatmap-grid">
+        {entries.map((x) => (
+          <button
+            key={`${x.likelihood}-${x.impact}`}
+            className={`heat-cell ${severityFor(x.impact * x.likelihood).toLowerCase()} ${x.matches.length ? "occupied" : ""}`}
+            title={`${x.likelihood} ? ${x.impact}: ${x.matches.length} ???????`}
+            onClick={() => setCell([x.likelihood, x.impact])}
+          >
+            <span>{x.matches.length || "?"}</span>
+          </button>
+        ))}
+      </div>
+      {chosen && (
+        <small className="heatmap-detail">
+          {chosen.matches.length
+            ? chosen.matches.map((r) => r.asset.name).join(" ? ")
+            : "??? ??????? ??????? ???"}
+        </small>
+      )}
+    </>
+  );
+}
+function Matrix({ activeL, activeI }: { activeL: number; activeI: number }) {
+  return (
+    <div className="matrix-wrap">
+      <div className="axis-y">ӘСЕР</div>
+      <div className="matrix">
+        <div className="matrix-top-labels">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <span key={i}>{i}</span>
+          ))}
+        </div>
+        {[5, 4, 3, 2, 1].map((i) => (
+          <div className="matrix-row" key={i}>
+            <b>{i}</b>
+            {[1, 2, 3, 4, 5].map((l) => (
+              <div
+                key={l}
+                className={`matrix-cell ${severityFor(l * i).toLowerCase()} ${l === activeL && i === activeI ? "selected" : ""}`}
+                title={`${l} × ${i} = ${l * i}`}
+              >
+                <span>{l * i}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+        <div className="matrix-bottom-labels">
+          <span>1 · Төмен</span>
+          <span>ЫҚТИМАЛДЫҚ →</span>
+          <span>5 · Жоғары</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+function Controls() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const q = useData<AnyRecord[]>("controls", "/security-controls");
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [owner, setOwner] = useState<Record<string, string>>({});
+  const m = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      patch(`/security-controls/${id}`, {
+        status,
+        verificationNotes: notes[id],
+        responsible: owner[id],
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["controls"] });
+      void qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+  const progress = q.data?.length
+    ? Math.round(
+        (q.data.filter((c) => ["IMPLEMENTED", "VERIFIED"].includes(c.status))
+          .length /
+          q.data.length) *
+          100,
+      )
+    : 0;
+  if (q.isError) return <ErrorState message={t("error")} />;
+  return (
+    <>
+      <div className="control-banner card">
+        <div className="banner-icon">
+          <ShieldCheck size={25} />
+        </div>
+        <div>
+          <span className="eyebrow">ҚОРҒАНЫС ҚАЛПЫ</span>
+          <h2>Негізгі киберқауіпсіздік шаралары</h2>
+          <p>
+            Мәртебені өзгерту қорғаныс прогресіне әсер етеді. Тәуекелді азайту
+            үшін қайта бағалау және растау қажет.
+          </p>
+        </div>
+        <div className="banner-progress">
+          <b>{progress}%</b>
+          <div className="progress-track">
+            <span style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      </div>
+      <div className="control-grid">
+        {q.data?.map((c) => (
+          <article className="card control-card" key={c.id}>
+            <div className="control-card-top">
+              <div className="control-icon">
+                <Shield size={18} />
+              </div>
+              <Pill>
+                {
+                  (
+                    {
+                      NOT_STARTED: "Басталмаған",
+                      IN_PROGRESS: "Орындалуда",
+                      IMPLEMENTED: "Енгізілді",
+                      VERIFIED: "Тексерілді",
+                    } as Record<string, string>
+                  )[c.status]
+                }
+              </Pill>
+            </div>
+            <h3>{c.name}</h3>
+            <p>{c.description}</p>
+            <div className="control-purpose">
+              <b>Қорғаныс мақсаты</b>
+              <span>{c.purpose}</span>
+            </div>
+            <div className="control-purpose">
+              <b>Іске асыру қадамы</b>
+              <span>{c.instructions}</span>
+            </div>
+            <div className="control-purpose">
+              <b>Қатысты активтер</b>
+              <span>
+                {c.assets?.length
+                  ? c.assets.map((x: any) => x.asset.name).join(" ? ")
+                  : "Ұйым деңгейіндегі шара"}
+              </span>
+            </div>
+            <label className="field compact">
+              Жауапты тұлға
+              <input
+                value={owner[c.id] ?? c.responsible}
+                onChange={(e) => setOwner({ ...owner, [c.id]: e.target.value })}
+              />
+            </label>
+            <label className="field compact">
+              Тексеру жазбасы
+              <textarea
+                placeholder="Орындалуын растайтын мәлімет…"
+                value={notes[c.id] ?? c.verificationNotes}
+                onChange={(e) => setNotes({ ...notes, [c.id]: e.target.value })}
+              />
+            </label>
+            <div className="control-footer">
+              <span>
+                Басымдық{" "}
+                <b className={c.priority === "HIGH" ? "priority-high" : ""}>
+                  {c.priority === "HIGH" ? "Жоғары" : "Орташа"}
+                </b>
+              </span>
+              <select
+                value={c.status}
+                onChange={(e) => m.mutate({ id: c.id, status: e.target.value })}
+              >
+                <option value="NOT_STARTED">Басталмаған</option>
+                <option value="IN_PROGRESS">Орындалуда</option>
+                <option value="IMPLEMENTED">Енгізілді</option>
+                <option value="VERIFIED">Тексерілді</option>
+              </select>
+              <button
+                className="button secondary"
+                onClick={() => m.mutate({ id: c.id, status: c.status })}
+              >
+                ???????????? ??????
+              </button>
+            </div>
+            {c.completedAt && (
+              <small className="completion-date">
+                ?????????? ????: {new Date(c.completedAt).toLocaleDateString()}
+              </small>
+            )}
+            {m.isError && (
+              <small className="field-error">
+                Сақталмады. Жергілікті демо режимін тексеріңіз.
+              </small>
+            )}
+          </article>
+        ))}
+      </div>
+    </>
+  );
+}
+function Topology() {
+  const { t } = useTranslation();
+  const q = useData<AnyRecord>("topology", "/network/topology");
+  const [selected, setSelected] = useState<AnyRecord | null>(null);
+  const baseNodes: Node[] = [
+    {
+      id: "internet",
+      position: { x: 40, y: 160 },
+      data: { label: "🌐  Интернет" },
+      type: "input",
+      className: "flow-node external",
+    },
+    {
+      id: "router",
+      position: { x: 280, y: 160 },
+      data: { label: "📡  Wi-Fi маршрутизаторы" },
+      className: "flow-node router",
+    },
+    {
+      id: "desktops",
+      position: { x: 540, y: 40 },
+      data: { label: "🖥️  10 үстел компьютері" },
+      className: "flow-node",
+    },
+    {
+      id: "laptops",
+      position: { x: 540, y: 125 },
+      data: { label: "💻  3 қызметкер ноутбугі" },
+      className: "flow-node",
+    },
+    {
+      id: "printer",
+      position: { x: 540, y: 210 },
+      data: { label: "🖨️  Желілік принтер" },
+      className: "flow-node",
+    },
+    {
+      id: "drive",
+      position: { x: 540, y: 310 },
+      data: { label: "☁️  Google Drive" },
+      type: "output",
+      className: "flow-node cloud",
+    },
+    {
+      id: "email",
+      position: { x: 810, y: 310 },
+      data: { label: "✉️  Корпоративтік пошта" },
+      type: "output",
+      className: "flow-node cloud",
+    },
+  ];
+  const [nodes, setNodes] = useState(baseNodes);
+  useEffect(() => {
+    if (q.data) {
+      setNodes(
+        baseNodes.map((n) => ({
+          ...n,
+          className: `${n.className} ${q.data.nodes.find((x: any) => x.id === n.id)?.highRisk ? "high-node" : ""}`,
+          data: {
+            ...n.data,
+            onClick: () =>
+              setSelected(q.data.nodes.find((x: any) => x.id === n.id)),
+          },
+        })),
+      );
+    }
+  }, [q.data]);
+  const edges: Edge[] =
+    q.data?.edges.map((e: any) => ({
+      id: `${e.source}-${e.target}`,
+      source: e.source,
+      target: e.target,
+      animated: true,
+      style: { stroke: "#818cf8", strokeWidth: 2.5 },
+      type: "smoothstep",
+      markerEnd: { type: "arrowclosed" as const, color: "#818cf8" },
+    })) || [];
+  return (
+    <>
+      <div className="topology-banner card">
+        <div className="banner-icon blue">
+          <Network size={23} />
+        </div>
+        <div>
+          <h2>Smart Education желі сызбасы</h2>
+          <p>{t("networkNote")} Нүктені басып актив туралы ақпарат алыңыз.</p>
+        </div>
+        <div className="topology-tools">
+          <button
+            className="button secondary"
+            onClick={() => setNodes(baseNodes)}
+          >
+            Орналасуды қалпына келтіру
+          </button>
+        </div>
+      </div>
+      <div className="topology-flow card">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          fitView
+          fitViewOptions={{ padding: 0.18 }}
+          onNodeClick={(_, n) =>
+            setSelected(q.data?.nodes.find((x: any) => x.id === n.id) || null)
+          }
+          onNodesChange={(changes) =>
+            setNodes((nds) => {
+              const map = new Map(
+                changes
+                  .filter((c) => c.type === "position")
+                  .map((c) => [c.id, c]),
+              );
+              return nds.map((n) => {
+                const c = map.get(n.id) as any;
+                return c?.position ? { ...n, position: c.position } : n;
+              });
+            })
+          }
+          nodesDraggable
+          nodesConnectable={false}
+          elementsSelectable
+        >
+          <Background color="var(--flow-grid)" gap={21} />
+          <FlowControls />
+        </ReactFlow>
+        <div className="flow-legend">
+          <span>
+            <i className="legend-office" />
+            Кеңсе желісі
+          </span>
+          <span>
+            <i className="legend-cloud" />
+            Сыртқы бұлттық қызмет
+          </span>
+          <span>
+            <i className="legend-risk" />
+            Жоғары тәуекелді актив
+          </span>
+        </div>
+      </div>
+      <div className="topology-info-grid">
+        <section className="card info-card">
+          <div className="info-icon">
+            <ArrowUpRight size={17} />
+          </div>
+          <h3>Трафик ағыны</h3>
+          <p>
+            Интернет трафигі маршрутизатор арқылы жергілікті құрылғыларға
+            жетеді. Google Drive пен корпоративтік поштаға сұраулар
+            маршрутизатор және интернет арқылы сыртқы қызметтерге өтеді.
+          </p>
+        </section>
+        <section className="card info-card">
+          <div className="info-icon green">
+            <ShieldCheck size={17} />
+          </div>
+          <h3>Қауіпсіздік ескертпесі</h3>
+          <p>
+            Бұл схема нақты құрылғыларды анықтамайды. Жергілікті желі сканерлеуі
+            орындалмайды; байланыстар оқу сценарийі бойынша қолмен енгізілген.
+          </p>
+        </section>
+      </div>
+      {selected && (
+        <div className="overlay" onClick={() => setSelected(null)}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-head">
+              <div>
+                <span className="eyebrow">ЖЕЛІ ТҮЙІНІ</span>
+                <h2>{selected.label}</h2>
+              </div>
+              <button className="icon-btn" onClick={() => setSelected(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <p>
+              Оқу топологиясындағы қолмен сипатталған компонент. Тәуекелдің
+              болуы автоматты тексеруден емес, дерекқордағы бағалаудан алынады.
+            </p>
+            {selected.highRisk && <Pill severity="HIGH" />}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+function Learning() {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState("https");
+  return (
+    <>
+      <div className="learning-hero card">
+        <div className="hero-orb">
+          <LockKeyhole size={30} />
+        </div>
+        <div>
+          <span className="eyebrow">ҚАУІПСІЗ БАЙЛАНЫС · ТЕОРИЯ</span>
+          <h2>Сенімді цифрлық байланыс</h2>
+          <p>
+            Интернет байланысын, сертификат пен цифрлық қолтаңбаның рөлін
+            зерттеңіз.
+          </p>
+        </div>
+        <div className="hero-decoration">
+          TLS
+          <br />
+          1.3
+        </div>
+      </div>
+      <div className="tabs">
+        {[
+          ["https", "HTTPS / TLS"],
+          ["cert", "Сандық сертификат"],
+          ["signature", "Электрондық цифрлық қолтаңба"],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            className={tab === id ? "active" : ""}
+            onClick={() => setTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "https" && (
+        <div className="learning-grid">
+          <section className="card lesson-card">
+            <div className="lesson-icon red">HTTP</div>
+            <span className="eyebrow">ШИФРЛАНБАҒАН</span>
+            <h2>HTTP</h2>
+            <p>
+              Браузер мен сервер арасындағы хабарламалар ашық мәтінмен
+              тасымалданады. Бір желідегі аралық бақылаушы мазмұнды көріп немесе
+              өзгертуге тырысуы мүмкін.
+            </p>
+            <ul>
+              <li>Дерек шифрланбайды</li>
+              <li>Сервер сәйкестігі расталмайды</li>
+              <li>Құпия ақпарат үшін қауіпсіз емес</li>
+            </ul>
+          </section>
+          <div className="secure-arrow">
+            <ArrowDownRight size={24} />
+            <span>TLS қосылады</span>
+          </div>
+          <section className="card lesson-card featured">
+            <div className="lesson-icon green">HTTPS</div>
+            <span className="eyebrow">ҚОРҒАЛҒАН АРНА</span>
+            <h2>HTTPS + TLS</h2>
+            <p>{t("http")}</p>
+            <ul>
+              <li>Трафик шифрланады</li>
+              <li>Хабарламаның тұтастығы қорғалады</li>
+              <li>Сертификат арқылы сервер тексеріледі</li>
+            </ul>
+          </section>
+          <section className="card steps-card">
+            <span className="eyebrow">ҚОЛ АЛЫСУ РЕТІ</span>
+            {[
+              [
+                "01",
+                "Сертификат",
+                "Сервер сертификатын және ашық кілтін ұсынады.",
+              ],
+              [
+                "02",
+                "Тексеру",
+                "Браузер сенімді CA тізбегі мен мерзімін тексереді.",
+              ],
+              [
+                "03",
+                "Кілт келісімі",
+                "Клиент пен сервер ортақ сеанс құпиясын келіседі.",
+              ],
+              [
+                "04",
+                "Шифрланған арна",
+                "Әрі қарайғы HTTP дерек TLS арқылы қорғалады.",
+              ],
+            ].map(([n, h, p]) => (
+              <div className="step-row" key={n}>
+                <b>{n}</b>
+                <div>
+                  <strong>{h}</strong>
+                  <span>{p}</span>
+                </div>
+              </div>
+            ))}
+          </section>
+        </div>
+      )}
+      {tab === "cert" && (
+        <div className="card cert-card">
+          <div className="cert-flow">
+            <div className="key-card public">
+              <Globe />
+              <b>Ашық кілт</b>
+              <small>Сертификатпен таралады</small>
+            </div>
+            <div className="cert-arrow">
+              байланыстырылады <ArrowDownRight />
+            </div>
+            <div className="key-card cert">
+              <FileText />
+              <b>Сандық сертификат</b>
+              <small>Субъект + ашық кілт + CA қолтаңбасы</small>
+            </div>
+            <div className="cert-arrow">
+              тексеріледі <ArrowDownRight />
+            </div>
+            <div className="key-card ca">
+              <ShieldCheck />
+              <b>Сенімді CA</b>
+              <small>Сертификаттар тізбегі</small>
+            </div>
+          </div>
+          <div className="cert-explain">
+            <div>
+              <span className="eyebrow">ЖАБЫҚ КІЛТ</span>
+              <p>
+                Иесінің бақылауында қалады. Қол қою немесе сервер сәйкестігін
+                дәлелдеу үшін қолданылады; оны ешкімге жіберуге болмайды.
+              </p>
+            </div>
+            <div>
+              <span className="eyebrow">СЕРТИФИКАТТЫ ТЕКСЕРУ</span>
+              <p>
+                {t("cert")} Мерзімі өтіп кеткен сертификат браузер ескертуін
+                тудырады.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      {tab === "signature" && (
+        <div className="signature-layout">
+          <div className="signature-card card">
+            <div className="signature-mark">ЭЦҚ</div>
+            <span className="eyebrow">ЭЛЕКТРОНДЫҚ ЦИФРЛЫҚ ҚОЛТАҢБА</span>
+            <h2>Авторлық пен тұтастықты растау</h2>
+            <p>{t("signature")}</p>
+            <div className="sign-steps">
+              <div>
+                <span>1</span>
+                <b>Қол қою</b>
+                <small>Жабық кілт құжат хэшіне қол қояды.</small>
+              </div>
+              <ChevronRight />
+              <div>
+                <span>2</span>
+                <b>Тексеру</b>
+                <small>Ашық кілт қолтаңбаның дұрыстығын тексереді.</small>
+              </div>
+            </div>
+          </div>
+          <div className="card legal-note">
+            <ShieldCheck size={21} />
+            <h3>Оқу мақсатындағы түсіндірме</h3>
+            <p>
+              Бұл модуль криптография ұғымдарын түсіндіреді. Ол заңды күші бар
+              Қазақстан ЭЦҚ-сын алмастырмайды және ешқандай нақты жабық кілтті
+              қабылдамайды не сақтамайды.
+            </p>
+            <span>Қазақстан Республикасының Ұлттық куәландырушы орталығы</span>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+function Policies() {
+  const qc = useQueryClient();
+  const q = useData<AnyRecord[]>("policies", "/security-policies");
+  const [done, setDone] = useState<string[]>([]);
+  useEffect(() => {
+    if (q.data)
+      setDone(
+        q.data.filter((p) => p.acknowledgements?.length).map((p) => p.id),
+      );
+  }, [q.data]);
+  const m = useMutation({
+    mutationFn: (id: string) =>
+      post(`/security-policies/${id}/acknowledgements`, {
+        employee: "Демо пайдаланушы",
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["policies"] });
+    },
+  });
+  const toggle = (p: AnyRecord) => {
+    if (done.includes(p.id)) return;
+    m.mutate(p.id);
+  };
+  return (
+    <>
+      <div className="policy-banner card">
+        <div className="banner-icon">
+          <LockKeyhole size={23} />
+        </div>
+        <div>
+          <span className="eyebrow">ҚЫЗМЕТКЕРГЕ АРНАЛҒАН НҰСҚАУЛЫҚ</span>
+          <h2>Ақпаратты қорғаудың күнделікті ережелері</h2>
+          <p>
+            Әр ережені оқығаннан кейін танысқаныңызды белгілеңіз. Өзгеріс
+            серверде сақталады.
+          </p>
+        </div>
+        <div className="completion-count">
+          <b>
+            {done.length}
+            <small>/{q.data?.length || 5}</small>
+          </b>
+          <span>таныстым</span>
+        </div>
+      </div>
+      <div className="policy-grid">
+        {q.data?.map((p: any, i: number) => (
+          <article
+            className={`card policy-card ${done.includes(p.id) ? "acknowledged" : ""}`}
+            key={p.id}
+          >
+            <div className="policy-number">0{i + 1}</div>
+            <h3>{p.title}</h3>
+            <p>{p.detail}</p>
+            <div className="do-dont">
+              <div className="do">
+                <b>
+                  <Check size={13} /> ДҰРЫС
+                </b>
+                <span>{p.example}</span>
+              </div>
+              <div className="dont">
+                <b>
+                  <X size={13} /> ЖАСАМАҢЫЗ
+                </b>
+                <span>
+                  Ақпаратқа рұқсаты жоқ адамға пароль немесе құжатты бермеңіз.
+                </span>
+              </div>
+            </div>
+            <button
+              className={`button ${done.includes(p.id) ? "ack-button" : "secondary"}`}
+              disabled={done.includes(p.id) || m.isPending}
+              onClick={() => toggle(p)}
+            >
+              {done.includes(p.id) ? (
+                <>
+                  <Check size={15} />
+                  Таныстым
+                </>
+              ) : (
+                "Оқып шықтым, таныстым"
+              )}
+            </button>
+          </article>
+        ))}
+      </div>
+      <div className="awareness-note">
+        <BookOpen size={18} />
+        <span>
+          Қауіпсіздік — ортақ жауапкершілік. Күмән туындаса, сілтемені ашпай,
+          дереу жауапты адамға хабарлаңыз.
+        </span>
+      </div>
+    </>
+  );
+}
+function Recommendations() {
+  const qc = useQueryClient();
+  const q = useData<AnyRecord[]>("recommendations", "/recommendations");
+  const m = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      patch(`/recommendations/${id}`, { status }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["recommendations"] });
+      void qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+  return (
+    <>
+      <div className="recommend-banner card">
+        <div className="banner-icon amber">
+          <Check size={23} />
+        </div>
+        <div>
+          <span className="eyebrow">ЭӘСЕРІН БАҚЫЛАУ</span>
+          <h2>Тәуекелді азайтуға арналған ұсынымдар</h2>
+          <p>
+            Орындалған ұсыным сақталған қалдық тәуекелді өзгертпейді. Нәтижені
+            растау және қайта бағалау қажет.
+          </p>
+        </div>
+      </div>
+      <div className="recommend-list">
+        {q.data?.map((r) => (
+          <article className="card recommendation" key={r.id}>
+            <div className={`priority-mark ${r.priority.toLowerCase()}`} />
+            <div className="recommend-content">
+              <div className="recommend-top">
+                <span className="eyebrow">
+                  {r.risk?.asset?.name || "Ұйым деңгейі"} ·{" "}
+                  {r.priority === "HIGH"
+                    ? "ЖОҒАРЫ БАСЫМДЫҚ"
+                    : "ОРТАША БАСЫМДЫҚ"}
+                </span>
+                <Pill>
+                  {r.status === "COMPLETED"
+                    ? "Орындалды"
+                    : r.status === "IN_PROGRESS"
+                      ? "Орындалуда"
+                      : "Ашық"}
+                </Pill>
+              </div>
+              <h3>{r.title}</h3>
+              <p>{r.description}</p>
+              <div className="recommend-detail">
+                <div>
+                  <b>Іске асыру қадамдары</b>
+                  <span>{r.steps}</span>
+                </div>
+                <div>
+                  <b>Күтілетін пайда</b>
+                  <span>{r.expectedBenefit}</span>
+                </div>
+                <div>
+                  <b>Жауапты</b>
+                  <span>{r.responsible}</span>
+                </div>
+              </div>
+              <div className="recommend-actions">
+                {r.risk && (
+                  <span>
+                    Қазіргі тәуекел: <b>{r.risk.score}/25</b> ·{" "}
+                    <Pill severity={r.risk.severity} />
+                  </span>
+                )}
+                <select
+                  value={r.status}
+                  onChange={(e) =>
+                    m.mutate({ id: r.id, status: e.target.value })
+                  }
+                >
+                  <option value="OPEN">Ашық</option>
+                  <option value="IN_PROGRESS">Орындалуда</option>
+                  <option value="COMPLETED">Орындалды</option>
+                </select>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </>
+  );
+}
+function Presentation() {
+  const [slide, setSlide] = useState(0);
+  const q = useData<DashboardSummary>(
+    "presentation-dashboard",
+    "/dashboard/summary",
+  );
+  const assets = useData<{ items: AnyRecord[] }>(
+    "presentation-assets",
+    "/assets?limit=100",
+  );
+  const controls = useData<AnyRecord[]>(
+    "presentation-controls",
+    "/security-controls",
+  );
+  const policies = useData<AnyRecord[]>(
+    "presentation-policies",
+    "/security-policies",
+  );
+  const risks = q.data?.risks || [];
+  const slides = [
+    {
+      label: "Ұйым профилі",
+      title: "Smart Education",
+      body: "12 қызметкері бар модельдік оқу орталығы. 10 үстел компьютері · 3 ноутбук · Wi-Fi · желілік принтер · Google Drive · корпоративтік пошта.",
+      icon: BuildingVisual,
+    },
+    {
+      label: "Активтер",
+      title: "8 негізгі ақпараттық актив",
+      body: (assets.data?.items || []).map((a) => a.name).join(" · "),
+      icon: Computer,
+    },
+    {
+      label: "Басым тәуекелдер",
+      title: "Қай тұсты күшейту қажет?",
+      body:
+        risks
+          .slice(0, 3)
+          .map((r) => `${r.asset.name} · ${r.score}/25`)
+          .join("\n") || "Бағалау жүктелуде",
+      icon: TriangleAlert,
+    },
+    {
+      label: "Қорғаныс",
+      title: "5 қорғаныс шарасы",
+      body: (controls.data || [])
+        .map(
+          (c) =>
+            `${c.name} — ${c.status === "NOT_STARTED" ? "басталмаған" : c.status === "VERIFIED" ? "тексерілген" : "орындалуда"}`,
+        )
+        .join("\n"),
+      icon: ShieldCheck,
+    },
+    {
+      label: "Желі және сенім",
+      title: "HTTPS · сертификат · ЭЦҚ",
+      body: "TLS байланысы шифрланады. Сертификат ашық кілтті тексереді. ЭЦҚ құжат тұтастығын жабық және ашық кілт арқылы растауға көмектеседі.",
+      icon: Network,
+    },
+    {
+      label: "Қызметкер ережелері",
+      title: "Қызметкерге арналған бес ереже",
+      body: (policies.data || [])
+        .map((p: any, i: number) => `${i + 1}. ${p.title}`)
+        .join("\n"),
+      icon: BookOpen,
+    },
+    {
+      label: "Қорытынды",
+      title: "Қауіпсіздік — үздіксіз үдеріс",
+      body: "Қызметкерлерді оқыту · қолжетімділікті шектеу · резервтік көшірме · қайта бағалау. Бұл — оқу моделіндегі қолмен енгізілген сценарий.",
+      icon: Shield,
+    },
+  ];
+  const next = (n: number) =>
+    setSlide(Math.max(0, Math.min(slides.length - 1, n)));
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") next(slide + 1);
+      if (e.key === "ArrowLeft") next(slide - 1);
+      if (e.key === "Escape") window.location.href = "/";
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [slide]);
+  const Icon = slides[slide].icon;
+  return (
+    <div className="presentation-shell">
+      <div className="pres-top">
+        <div className="brand-mark">
+          <Shield size={19} />
+        </div>
+        <b>
+          CyberGuard <span>·</span> ЖОБАНЫ ҚОРҒАУ
+        </b>
+        <button
+          className="icon-btn"
+          onClick={() => (window.location.href = "/")}
+        >
+          <X size={19} />
+        </button>
+      </div>
+      <div className="pres-content">
+        <div className="pres-count">
+          {String(slide + 1).padStart(2, "0")}{" "}
+          <span>/ {String(slides.length).padStart(2, "0")}</span>
+        </div>
+        <div className="pres-icon">
+          <Icon size={39} />
+        </div>
+        <span className="eyebrow">{slides[slide].label}</span>
+        <h1>{slides[slide].title}</h1>
+        <p>{slides[slide].body}</p>
+        {slide === 2 && (
+          <div className="pres-risk-list">
+            {risks.slice(0, 3).map((r) => (
+              <span key={r.id}>
+                <b>{r.asset.name}</b>
+                <strong>{r.score}/25</strong>
+                <small>{r.mitigation}</small>
+                <Pill severity={r.severity as Severity} />
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="pres-bottom">
+        <div className="pres-dots">
+          {slides.map((s, i) => (
+            <button
+              key={s.label}
+              className={i === slide ? "active" : ""}
+              onClick={() => next(i)}
+              aria-label={`${i + 1}-слайд`}
+            />
+          ))}
+        </div>
+        <span>← → пернелерімен ауысу</span>
+        <div>
+          <button
+            className="button secondary"
+            disabled={slide === 0}
+            onClick={() => next(slide - 1)}
+          >
+            <ChevronLeft size={15} />
+            Артқа
+          </button>
+          <button
+            className="button primary"
+            disabled={slide === slides.length - 1}
+            onClick={() => next(slide + 1)}
+          >
+            Келесі
+            <ChevronRight size={15} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function BuildingVisual() {
+  return (
+    <div className="building-visual">
+      <Monitor />
+      <Wifi />
+      <Cloud />
+      <Shield />
+    </div>
+  );
+}
 export default App;

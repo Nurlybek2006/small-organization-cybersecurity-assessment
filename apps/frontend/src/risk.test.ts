@@ -1,2 +1,12 @@
-import {describe,it,expect} from 'vitest';import {riskScore,severityFor} from '@cyberguard/shared';
-describe('5×5 оқу тәуекелі',()=>{it('есепті дәл шығарады',()=>expect(riskScore(4,3)).toBe(12));it('шектерді дұрыс бөледі',()=>{expect(severityFor(4)).toBe('LOW');expect(severityFor(5)).toBe('MEDIUM');expect(severityFor(9)).toBe('MEDIUM');expect(severityFor(10)).toBe('HIGH')});it('1–5 диапазонын қорғайды',()=>expect(()=>riskScore(6,2)).toThrow())});
+import { describe, it, expect } from "vitest";
+import { riskScore, severityFor } from "@cyberguard/shared";
+describe("5×5 оқу тәуекелі", () => {
+  it("есепті дәл шығарады", () => expect(riskScore(4, 3)).toBe(12));
+  it("шектерді дұрыс бөледі", () => {
+    expect(severityFor(4)).toBe("LOW");
+    expect(severityFor(5)).toBe("MEDIUM");
+    expect(severityFor(9)).toBe("MEDIUM");
+    expect(severityFor(10)).toBe("HIGH");
+  });
+  it("1–5 диапазонын қорғайды", () => expect(() => riskScore(6, 2)).toThrow());
+});

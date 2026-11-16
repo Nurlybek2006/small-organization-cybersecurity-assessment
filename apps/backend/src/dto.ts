@@ -1,6 +1,47 @@
-import { IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
-import { Type } from 'class-transformer';
-export class AssetDto { @IsString() @MinLength(2) name!:string; @IsString() @MinLength(2) description!:string; @IsString() @MinLength(2) category!:string; @IsString() @MinLength(2) owner!:string; @Type(()=>Number) @IsInt() @Min(1) @Max(5) criticality!:number; }
-export class RiskDto { @IsString() assetId!:string; @IsString() threatId!:string; @IsString() vulnerabilityId!:string; @Type(()=>Number) @IsInt() @Min(1) @Max(5) likelihood!:number; @Type(()=>Number) @IsInt() @Min(1) @Max(5) impact!:number; @IsString() @MinLength(3) justification!:string; @IsOptional() @IsString() consequence?:string; @IsOptional() @IsString() mitigation?:string; @IsOptional() @IsString() note?:string; }
-export class StatusDto { @IsIn(['NOT_STARTED','IN_PROGRESS','IMPLEMENTED','VERIFIED','OPEN','COMPLETED']) status!:string; @IsOptional() @IsString() responsible?:string; @IsOptional() @IsString() verificationNotes?:string; }
-export class GenericCreateDto { @IsString() @MinLength(2) name!:string; @IsString() @MinLength(3) description!:string; @IsString() @IsOptional() assetId?:string; @IsString() @IsOptional() threatId?:string; }
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+} from "class-validator";
+import { Type } from "class-transformer";
+export class AssetDto {
+  @IsString() @MinLength(2) name!: string;
+  @IsString() @MinLength(2) description!: string;
+  @IsString() @MinLength(2) category!: string;
+  @IsString() @MinLength(2) owner!: string;
+  @Type(() => Number) @IsInt() @Min(1) @Max(5) criticality!: number;
+}
+export class RiskDto {
+  @IsString() assetId!: string;
+  @IsString() threatId!: string;
+  @IsString() vulnerabilityId!: string;
+  @Type(() => Number) @IsInt() @Min(1) @Max(5) likelihood!: number;
+  @Type(() => Number) @IsInt() @Min(1) @Max(5) impact!: number;
+  @IsString() @MinLength(3) justification!: string;
+  @IsOptional() @IsString() consequence?: string;
+  @IsOptional() @IsString() mitigation?: string;
+  @IsOptional() @IsString() note?: string;
+}
+export class StatusDto {
+  @IsIn([
+    "NOT_STARTED",
+    "IN_PROGRESS",
+    "IMPLEMENTED",
+    "VERIFIED",
+    "OPEN",
+    "COMPLETED",
+  ])
+  status!: string;
+  @IsOptional() @IsString() responsible?: string;
+  @IsOptional() @IsString() verificationNotes?: string;
+}
+export class GenericCreateDto {
+  @IsString() @MinLength(2) name!: string;
+  @IsString() @MinLength(3) description!: string;
+  @IsString() @IsOptional() assetId?: string;
+  @IsString() @IsOptional() threatId?: string;
+}
